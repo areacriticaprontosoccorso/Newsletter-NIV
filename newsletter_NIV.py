@@ -1,54 +1,29 @@
 """
 NIV Weekly Digest — Newsletter insufficienza respiratoria acuta
 Pronto Soccorso San Giovanni Bosco, Torino
-Comando: python newsletter_niv.py
 """
 
-import os
-import re
-import json
-import time
-import logging
-import base64
-import urllib.request
-import urllib.error
+import os, re, json, time, logging, base64
+import urllib.request, urllib.error
 import xml.etree.ElementTree as ET
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
-
 import config as cfg
 
-DESTINATARI = [
-    "francesco.panero@aslcittaditorino.it",
-]
-
+DESTINATARI = ["francesco.panero@aslcittaditorino.it"]
 TUTTE_RIVISTE = cfg.RIVISTE_NIV + cfg.RIVISTE
 ARTICOLI_FINALI = 5
 COLOR_ACCENT = "#2e7d32"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(cfg.LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler(),
-    ],
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.FileHandler(cfg.LOG_FILE, encoding="utf-8"), logging.StreamHandler()])
 log = logging.getLogger("newsletter_niv")
-
 
 def numero_settimana():
     now = datetime.now()
-    mesi = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
-            "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"]
-    return {
-        "settimana": now.isocalendar()[1],
-        "anno":      now.year,
-        "giorno":    now.day,
-        "mese":      mesi[now.month - 1],
-    }
-
+    mesi = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"]
+    return {"settimana": now.isocalendar()[1], "anno": now.year, "giorno": now.day, "mese": mesi[now.month - 1]}
 
 def fetch_url(url, timeout=20):
     req = urllib.request.Request(url, headers={"User-Agent": cfg.NCBI_TOOL})
@@ -61,63 +36,47 @@ def fetch_url(url, timeout=20):
             time.sleep(2 ** attempt)
     raise RuntimeError(f"Fetch fallito: {url}")
 
-
 NS = {"dc": "http://purl.org/dc/elements/1.1/"}
-
 
 def url_rss_pubmed(issn):
     return f"https://pubmed.ncbi.nlm.nih.gov/rss/journals/{issn}/?limit=20&utm_campaign=journals"
 
-
 def parse_pubdate(s):
-    if not s:
-        return None
+    if not s: return None
     try:
         from email.utils import parsedate_to_datetime
         return parsedate_to_datetime(s)
-    except Exception:
-        return None
+    except: return None
 
-
-def estrai_abstract_da_description(desc):
-    if not desc:
-        return ""
-    testo = re.sub(r"<[^>]+>", " ", desc)
-    testo = testo.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"')
-    testo = re.sub(r"PMID:\s*\d+.*$", "", testo, flags=re.IGNORECASE)
-    testo = re.sub(r"DOI:\s*[\w./-]+", "", testo, flags=re.IGNORECASE)
-    testo = re.sub(r"\s+", " ", testo).strip()
-    return testo[:2500]
-
+def estrai_abstract(desc):
+    if not desc: return ""
+    t = re.sub(r"<[^>]+>", " ", desc)
+    t = t.replace("&nbsp;"," ").replace("&amp;","&").replace("&lt;","<").replace("&gt;",">").replace("&quot;",'"')
+    t = re.sub(r"PMID:\s*\d+.*$", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"DOI:\s*[\w./-]+", "", t, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", t).strip()[:2500]
 
 def estrai_pmid(item):
     link_el = item.find("link")
     if link_el is not None and link_el.text:
         m = re.search(r"/(\d{7,9})/?", link_el.text)
-        if m:
-            return m.group(1)
+        if m: return m.group(1)
     for ident in item.findall("dc:identifier", NS):
         if ident.text and ident.text.startswith("pmid:"):
-            return ident.text.replace("pmid:", "").strip()
+            return ident.text.replace("pmid:","").strip()
     return ""
-
 
 def estrai_doi(item):
     for ident in item.findall("dc:identifier", NS):
         if ident.text and ident.text.startswith("doi:"):
-            return ident.text.replace("doi:", "").strip()
+            return ident.text.replace("doi:","").strip()
     return ""
 
-
 def estrai_autori(item):
-    creators = item.findall("dc:creator", NS)
-    nomi = [c.text for c in creators if c.text]
-    if not nomi:
-        return ""
-    if len(nomi) > 3:
-        return ", ".join(nomi[:3]) + " et al."
+    nomi = [c.text for c in item.findall("dc:creator", NS) if c.text]
+    if not nomi: return ""
+    if len(nomi) > 3: return ", ".join(nomi[:3]) + " et al."
     return ", ".join(nomi)
-
 
 def fetch_feed(rivista):
     url = url_rss_pubmed(rivista["issn"])
@@ -129,86 +88,142 @@ def fetch_feed(rivista):
         return []
     articoli = []
     for item in root.findall(".//item"):
-        titolo   = (item.findtext("title") or "").strip()
-        link     = (item.findtext("link") or "").strip()
-        desc     = item.findtext("description") or ""
-        pubdate  = parse_pubdate(item.findtext("pubDate"))
-        pmid     = estrai_pmid(item)
-        doi      = estrai_doi(item)
-        autori   = estrai_autori(item)
-        abstract = estrai_abstract_da_description(desc)
-        if not pmid or not titolo:
-            continue
-        articoli.append({
-            "pmid":       pmid,
-            "titolo":     titolo.rstrip("."),
-            "autori":     autori,
-            "rivista":    rivista["nome"],
-            "data":       pubdate.strftime("%Y %b %d") if pubdate else "",
-            "pubdate_dt": pubdate,
-            "doi":        doi,
-            "abstract":   abstract,
-            "url":        link or f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
-        })
-    log.info(f"  {rivista['nlmta']}: {len(articoli)} articoli dal feed")
+        titolo = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        desc = item.findtext("description") or ""
+        pubdate = parse_pubdate(item.findtext("pubDate"))
+        pmid = estrai_pmid(item)
+        if not pmid or not titolo: continue
+        articoli.append({"pmid": pmid, "titolo": titolo.rstrip("."), "autori": estrai_autori(item),
+            "rivista": rivista["nome"], "data": pubdate.strftime("%Y %b %d") if pubdate else "",
+            "pubdate_dt": pubdate, "doi": estrai_doi(item), "abstract": estrai_abstract(desc),
+            "url": link or f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"})
+    log.info(f"  {rivista['nlmta']}: {len(articoli)} articoli")
     return articoli
 
-
 def raccogli_candidati(giorni=7):
-    log.info(f"Lettura RSS PubMed: ultimi {giorni} giorni su {len(TUTTE_RIVISTE)} riviste")
+    log.info(f"RSS PubMed: ultimi {giorni}g su {len(TUTTE_RIVISTE)} riviste")
     cutoff = datetime.now(timezone.utc) - timedelta(days=giorni)
     tutti = []
-    for rivista in TUTTE_RIVISTE:
-        feed = fetch_feed(rivista)
-        recenti = [
-            a for a in feed
-            if a["pubdate_dt"] and a["pubdate_dt"].astimezone(timezone.utc) >= cutoff
-        ]
-        log.info(f"    -> {len(recenti)} pubblicati negli ultimi {giorni}g")
+    for r in TUTTE_RIVISTE:
+        feed = fetch_feed(r)
+        recenti = [a for a in feed if a["pubdate_dt"] and a["pubdate_dt"].astimezone(timezone.utc) >= cutoff]
+        log.info(f"    -> {len(recenti)} ultimi {giorni}g")
         tutti.extend(recenti)
         time.sleep(0.3)
     seen = set()
-    unici = []
-    for a in tutti:
-        if a["pmid"] not in seen:
-            seen.add(a["pmid"])
-            unici.append(a)
-    con_abstract = [a for a in unici if a["abstract"] and len(a["abstract"]) > 100]
-    log.info(f"Totale unici: {len(unici)}, con abstract: {len(con_abstract)}")
-    return con_abstract
+    unici = [a for a in tutti if not (a["pmid"] in seen or seen.add(a["pmid"]))]
+    ok = [a for a in unici if a["abstract"] and len(a["abstract"]) > 100]
+    log.info(f"Unici: {len(unici)}, con abstract: {len(ok)}")
+    return ok
 
-
-def chiama_opus(prompt, max_tokens=1500):
-    payload = json.dumps({
-        "model":      cfg.ANTHROPIC_MODEL,
-        "max_tokens": max_tokens,
-        "messages":   [{"role": "user", "content": prompt}],
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=payload,
-        headers={
-            "Content-Type":      "application/json",
-            "x-api-key":         cfg.ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-        },
-        method="POST",
-    )
+def chiama_claude(prompt, max_tokens=1500):
+    payload = json.dumps({"model": cfg.ANTHROPIC_MODEL, "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}]}).encode("utf-8")
+    req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=payload,
+        headers={"Content-Type": "application/json", "x-api-key": cfg.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=90) as r:
             data = json.loads(r.read().decode("utf-8"))
         return data["content"][0]["text"].strip()
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        raise RuntimeError(f"Anthropic API errore {e.code}: {body[:400]}")
+        raise RuntimeError(f"API errore {e.code}: {body[:400]}")
 
+FILTRO = "Sei un medico di PS esperto in ventilazione non invasiva. Dalla lista sotto, seleziona i 5 articoli piu rilevanti per insufficienza respiratoria acuta, NIV, CPAP, HFNC/HNFO, BiPAP, ARDS, weaning, edema polmonare acuto, riacutizzazione BPCO. Escludi: ventilazione invasiva pura, pneumologia ambulatoriale, case reports, lettere, errata. ARTICOLI:\n{articoli}\n\nRestituisci SOLO 5 PMID, uno per riga, nessun commento."
 
-PROMPT_FILTRO_NIV = """Sei un medico di Pronto Soccorso italiano esperto in ventilazione non invasiva e supporto respiratorio.
+def filtra_top(candidati):
+    if len(candidati) <= ARTICOLI_FINALI: return candidati
+    blocchi = [f"PMID: {a['pmid']}\nRIVISTA: {a['rivista']}\nTITOLO: {a['titolo']}\nABSTRACT: {a['abstract'][:700]}" for a in candidati]
+    risposta = chiama_claude(FILTRO.format(articoli="\n---\n".join(blocchi)), 200)
+    pmids = re.findall(r"\b\d{7,9}\b", risposta)[:ARTICOLI_FINALI]
+    log.info(f"Claude selezionati: {pmids}")
+    m = {a["pmid"]: a for a in candidati}
+    return [m[p] for p in pmids if p in m]
 
-Dalla lista qui sotto, seleziona i 5 articoli piu rilevanti per la gestione dell'insufficienza respiratoria acuta, con focus su:
+def sintetizza(art):
+    prompt = cfg.PROMPT_SINTESI.format(titolo=art["titolo"], autori=art["autori"],
+        rivista=art["rivista"], data=art["data"],
+        abstract=art["abstract"][:2000] if art["abstract"] else "(non disponibile)")
+    try:
+        r = chiama_claude(prompt, 600)
+        sm = re.search(r"^SINTESI:\s*([\s\S]+?)(?=\nRILEVANZA:)", r, re.MULTILINE)
+        rm = re.search(r"^RILEVANZA:\s*(.+)", r, re.MULTILINE)
+        art["sintesi_it"] = sm.group(1).strip() if sm else r[:400]
+        art["rilevanza"] = rm.group(1).strip() if rm else ""
+    except Exception as e:
+        log.error(f"Sintesi fallita {art['pmid']}: {e}")
+        art["sintesi_it"] = ""
+        art["rilevanza"] = ""
+    return art
 
-INCLUDI articoli su:
-- Ventilazione non invasiva (NIV, BiPAP, BiLevel) nell'insufficienza respiratoria acuta
-- CPAP in edema polmonare acuto, ARDS, post-estubazione
-- High-Flow Nasal Cannula (HFNC/HNFO) — indicazioni, outcomes, confronti con NIV
-- Insufficienza respiratoria acuta ipossiemica e​​​​​​​​​​​​​​​​
+def build_html(articoli):
+    wl = numero_settimana()
+    arts = ""
+    for i, a in enumerate(articoli):
+        doi = f' | <a href="https://doi.org/{a["doi"]}" style="font-family:monospace;font-size:11px;color:#0a4d68;text-decoration:none;">DOI</a>' if a.get("doi") else ""
+        syn = ""
+        if a.get("sintesi_it"):
+            rel = f'<br/><strong style="color:{COLOR_ACCENT};">{a["rilevanza"]}</strong>' if a.get("rilevanza") else ""
+            syn = f'<div style="background:#f4f8f4;border-left:3px solid {COLOR_ACCENT};padding:12px 16px;font-family:Georgia,serif;font-size:14px;color:#2a2a2a;line-height:1.6;margin-bottom:12px;">{a["sintesi_it"]}{rel}</div>'
+        ab = ""
+        if a.get("abstract"):
+            ab = f'<details style="margin-bottom:10px;"><summary style="font-family:monospace;font-size:10px;color:#0a4d68;cursor:pointer;letter-spacing:1px;text-transform:uppercase;list-style:none;">Abstract (EN)</summary><p style="font-family:Georgia,serif;font-size:12px;color:#666;line-height:1.65;margin-top:8px;padding:10px 12px;background:#fafafa;border:1px solid #eee;">{a["abstract"]}</p></details>'
+        arts += f'<tr><td style="padding:28px 32px 24px;border-bottom:1px solid #dde8dd;"><div style="margin-bottom:10px;"><span style="font-family:monospace;font-size:12px;color:{COLOR_ACCENT};font-weight:700;">{str(i+1).zfill(2)}</span> <span style="font-family:monospace;font-size:11px;color:#aaa;">{a["rivista"]} - {a["data"]}</span></div><a href="{a["url"]}" style="font-family:Georgia,serif;font-size:19px;font-weight:700;color:#1a1a1a;text-decoration:none;line-height:1.35;display:block;margin-bottom:6px;">{a["titolo"]}</a><div style="font-family:monospace;font-size:12px;color:#999;font-style:italic;margin-bottom:14px;">{a["autori"]}</div>{syn}{ab}<div><a href="{a["url"]}" style="font-family:monospace;font-size:11px;color:#0a4d68;text-decoration:none;">PubMed {a["pmid"]}</a>{doi}</div></td></tr>'
+    niv_str = " - ".join(r["nlmta"] for r in cfg.RIVISTE_NIV)
+    return f'''<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{cfg.NOME_NEWSLETTER}</title></head><body style="margin:0;padding:0;background:#eaf0ea;"><table width="100%" cellpadding="0" cellspacing="0" bgcolor="#eaf0ea"><tr><td align="center" style="padding:32px 16px;"><table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;"><tr><td style="background:{cfg.COLOR_DARK};padding:0;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:{COLOR_ACCENT};height:4px;"></td></tr><tr><td style="padding:28px 32px 24px;"><div style="font-family:monospace;font-size:10px;color:#778;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">{cfg.NOME_SERVIZIO}</div><h1 style="font-family:Georgia,serif;font-size:32px;color:#ffffff;margin:0 0 6px;font-weight:700;">NIV Weekly<br/><em style="color:{COLOR_ACCENT};font-style:italic;">Digest</em></h1><div style="font-family:monospace;font-size:11px;color:#667;">Settimana {wl["settimana"]} - {wl["giorno"]} {wl["mese"]} {wl["anno"]} - {len(articoli)} articoli</div></td><td style="padding:28px 32px 24px;text-align:right;vertical-align:top;"><div style="font-family:monospace;font-size:52px;font-weight:700;color:#2a3a2e;letter-spacing:-3px;line-height:1;">{str(wl["settimana"]).zfill(2)}</div><div style="font-family:monospace;font-size:10px;color:#556;letter-spacing:3px;">WEEK</div></td></tr></table></td></tr><tr><td style="background:#f0f5f0;padding:12px 32px;border-bottom:2px solid {cfg.COLOR_DARK};"><span style="font-family:monospace;font-size:10px;color:#889;letter-spacing:1px;">NIV: {niv_str} + generaliste</span></td></tr><tr><td style="background:#ffffff;"><table width="100%" cellpadding="0" cellspacing="0">{arts}</table></td></tr><tr><td style="background:{cfg.COLOR_DARK};padding:22px 32px;"><p style="font-family:monospace;font-size:10px;color:#556;margin:0;line-height:1.8;">Generato con Claude Sonnet 4.6 - Fonte: PubMed RSS<br/>Sintesi AI - verificare le fonti primarie.</p></td></tr></table></td></tr></table></body></html>'''
+
+def invia_email(oggetto, html):
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build as gb
+    token_json = os.environ.get("GMAIL_TOKEN", "")
+    if not token_json:
+        log.error("GMAIL_TOKEN mancante")
+        return False
+    td = json.loads(token_json)
+    creds = Credentials(token=td['token'], refresh_token=td['refresh_token'], token_uri=td['token_uri'], client_id=td['client_id'], client_secret=td['client_secret'], scopes=td['scopes'])
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = oggetto
+    msg["From"] = f"NIV Weekly Digest <{cfg.GMAIL_USER}>"
+    msg["To"] = ", ".join(DESTINATARI)
+    msg.attach(MIMEText(f"NIV Weekly Digest - {oggetto}", "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+    try:
+        svc = gb('gmail', 'v1', credentials=creds)
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        svc.users().messages().send(userId='me', body={'raw': raw}).execute()
+        log.info(f"Email inviata a {len(DESTINATARI)} destinatari")
+        return True
+    except Exception as e:
+        log.error(f"Invio fallito: {e}")
+        return False
+
+def main():
+    cfg.valida_config()
+    wl = numero_settimana()
+    log.info(f"=== NIV Weekly Digest - settimana {wl['settimana']}/{wl['anno']} ===")
+    candidati = raccogli_candidati(giorni=7)
+    if len(candidati) < ARTICOLI_FINALI + 3:
+        log.warning(f"Solo {len(candidati)} a 7g - estendo a 14g")
+        candidati = raccogli_candidati(giorni=14)
+    if not candidati:
+        log.error("Nessun articolo trovato")
+        return False
+    selezionati = filtra_top(candidati)
+    log.info(f"Selezionati {len(selezionati)} articoli")
+    if not selezionati:
+        log.error("Filtro vuoto")
+        return False
+    log.info("Sintesi Claude...")
+    for i, art in enumerate(selezionati):
+        log.info(f"  Sintesi {i+1}/{len(selezionati)}: {art['pmid']}")
+        selezionati[i] = sintetizza(art)
+        time.sleep(1)
+    html = build_html(selezionati)
+    ok = invia_email(f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}", html)
+    log.info("=== OK ===" if ok else "=== FALLITO ===")
+    return ok
+
+if __name__ == "__main__":
+    main()
