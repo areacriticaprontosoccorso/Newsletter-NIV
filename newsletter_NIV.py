@@ -131,7 +131,8 @@ def chiama_claude(prompt, max_tokens=1500):
         body = e.read().decode("utf-8")
         raise RuntimeError(f"API errore {e.code}: {body[:400]}")
 
-FILTRO = "Sei un medico di PS esperto in ventilazione non invasiva. Dalla lista sotto, seleziona i 5 articoli piu rilevanti per insufficienza respiratoria acuta, NIV, CPAP, HFNC/HNFO, BiPAP, ARDS, weaning, edema polmonare acuto, riacutizzazione BPCO. Escludi: ventilazione invasiva pura, pneumologia ambulatoriale, case reports, lettere, errata. ARTICOLI:\n{articoli}\n\nRestituisci SOLO 5 PMID, uno per riga, nessun commento."
+FILTRO = "Sei un medico di PS esperto in ventilazione non invasiva. Dalla lista sotto, seleziona SOLO i 5 articoli che trattano DIRETTAMENTE ed ESPLICITAMENTE uno di questi argomenti: ventilazione non invasiva (NIV/BiPAP/BiLevel), CPAP, High-Flow Nasal Cannula (HFNC/HNFO), insufficienza respiratoria acuta ipossiemica o ipercapnica, ARDS e strategie ventilatorie non invasive, edema polmonare acuto cardiogeno trattato con supporto ventilatorio, riacutizzazione BPCO con NIV, weaning e post-estubazione con NIV/HFNC, interfacce e devices per ventilazione non invasiva, monitoraggio respiratorio durante NIV. ESCLUDI TASSATIVAMENTE articoli che non menzionano esplicitamente NIV, CPAP, HFNC, HNFO, supporto ventilatorio o insufficienza respiratoria acuta nel titolo o abstract, anche se provengono da riviste di critical care. Escludi: cardiologia, neurologia, sepsi senza focus ventilatorio, chirurgia, oncologia, nefrologia, endocrinologia, infettivologia generica, case reports, lettere, errata, commenti. Se non trovi 5 articoli pertinenti, restituisci SOLO quelli realmente pertinenti (anche 1 o 2). ARTICOLI:\n{articoli}\n\nRestituisci SOLO i PMID pertinenti, uno per riga, nessun commento."
+
 
 def filtra_top(candidati):
     if len(candidati) <= ARTICOLI_FINALI: return candidati
