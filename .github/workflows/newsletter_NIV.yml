@@ -15,11 +15,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Installa dipendenze
-        run: pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client
       - name: Esegui newsletter NIV
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_TOKEN: ${{ secrets.GMAIL_TOKEN }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python newsletter_NIV.py
