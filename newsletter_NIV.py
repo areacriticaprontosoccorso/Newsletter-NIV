@@ -3,7 +3,7 @@ NIV Weekly Digest — Newsletter insufficienza respiratoria acuta
 Pronto Soccorso San Giovanni Bosco, Torino
 """
 
-import os, re, json, time, logging, base64
+import os, re, json, time, logging, smtplib
 import urllib.request, urllib.error
 import xml.etree.ElementTree as ET
 from email.mime.multipart import MIMEMultipart
@@ -176,14 +176,10 @@ def build_html(articoli):
     return f'''<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{cfg.NOME_NEWSLETTER}</title></head><body style="margin:0;padding:0;background:#eaf0ea;"><table width="100%" cellpadding="0" cellspacing="0" bgcolor="#eaf0ea"><tr><td align="center" style="padding:32px 16px;"><table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;"><tr><td style="background:{cfg.COLOR_DARK};padding:0;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:{COLOR_ACCENT};height:4px;"></td></tr><tr><td style="padding:28px 32px 24px;"><div style="font-family:monospace;font-size:10px;color:#778;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">{cfg.NOME_SERVIZIO}</div><h1 style="font-family:Georgia,serif;font-size:32px;color:#ffffff;margin:0 0 6px;font-weight:700;">NIV Weekly<br/><em style="color:{COLOR_ACCENT};font-style:italic;">Digest</em></h1><div style="font-family:monospace;font-size:11px;color:#667;">Settimana {wl["settimana"]} - {wl["giorno"]} {wl["mese"]} {wl["anno"]} - {len(articoli)} articoli</div></td><td style="padding:28px 32px 24px;text-align:right;vertical-align:top;"><div style="font-family:monospace;font-size:52px;font-weight:700;color:#2a3a2e;letter-spacing:-3px;line-height:1;">{str(wl["settimana"]).zfill(2)}</div><div style="font-family:monospace;font-size:10px;color:#556;letter-spacing:3px;">WEEK</div></td></tr></table></td></tr><tr><td style="background:#f0f5f0;padding:12px 32px;border-bottom:2px solid {cfg.COLOR_DARK};"><span style="font-family:monospace;font-size:10px;color:#889;letter-spacing:1px;">NIV: {niv_str} + generaliste</span></td></tr><tr><td style="background:#ffffff;"><table width="100%" cellpadding="0" cellspacing="0">{arts}</table></td></tr><tr><td style="background:{cfg.COLOR_DARK};padding:22px 32px;"><p style="font-family:monospace;font-size:10px;color:#556;margin:0;line-height:1.8;">Generato con Claude Sonnet 4.6 - Fonte: PubMed RSS<br/>Sintesi AI - verificare le fonti primarie.</p></td></tr></table></td></tr></table></body></html>'''
 
 def invia_email(oggetto, html):
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build as gb
-    token_json = os.environ.get("GMAIL_TOKEN", "")
-    if not token_json:
-        log.error("GMAIL_TOKEN mancante")
+    app_password = os.environ.get("GMAIL_APP_PASSWORD", "")
+    if not app_password:
+        log.error("GMAIL_APP_PASSWORD mancante")
         return False
-    td = json.loads(token_json)
-    creds = Credentials(token=td['token'], refresh_token=td['refresh_token'], token_uri=td['token_uri'], client_id=td['client_id'], client_secret=td['client_secret'], scopes=td['scopes'])
     msg = MIMEMultipart("alternative")
     msg["Subject"] = oggetto
     msg["From"] = f"NIV Weekly Digest <{cfg.GMAIL_USER}>"
@@ -191,9 +187,9 @@ def invia_email(oggetto, html):
     msg.attach(MIMEText(f"NIV Weekly Digest - {oggetto}", "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     try:
-        svc = gb('gmail', 'v1', credentials=creds)
-        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        svc.users().messages().send(userId='me', body={'raw': raw}).execute()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(cfg.GMAIL_USER, app_password)
+            smtp.send_message(msg)
         log.info(f"Email inviata a {len(DESTINATARI)} destinatari")
         return True
     except Exception as e:
