@@ -24,10 +24,10 @@ def carica_destinatari():
         fisso = "francesco.panero@aslcittaditorino.it"
         if fisso not in emails:
             emails.insert(0, fisso)
-        log.info(f"Destinatari caricati: {len(emails)}")
+        print(f"Destinatari caricati: {len(emails)}")
         return emails
     except Exception as e:
-        log.error(f"Errore carica subscribers: {e}")
+        print(f"Errore carica subscribers: {e}")
         return ["francesco.panero@aslcittaditorino.it"]
 
 DESTINATARI = carica_destinatari()
