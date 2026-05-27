@@ -11,7 +11,26 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 import config as cfg
 
-DESTINATARI = ["francesco.panero@aslcittaditorino.it"]
+def carica_destinatari():
+    try:
+        sub_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "subscribers.json")
+        with open(sub_path, encoding="utf-8") as f:
+            subs = json.load(f)
+        emails = [
+            s["email"].strip()
+            for s in subs
+            if "@" in s.get("email", "") and " " not in s.get("email", "")
+        ]
+        fisso = "francesco.panero@aslcittaditorino.it"
+        if fisso not in emails:
+            emails.insert(0, fisso)
+        log.info(f"Destinatari caricati: {len(emails)}")
+        return emails
+    except Exception as e:
+        log.error(f"Errore carica subscribers: {e}")
+        return ["francesco.panero@aslcittaditorino.it"]
+
+DESTINATARI = carica_destinatari()
 TUTTE_RIVISTE = cfg.RIVISTE_NIV + cfg.RIVISTE
 ARTICOLI_FINALI = 5
 COLOR_ACCENT = "#2e7d32"
