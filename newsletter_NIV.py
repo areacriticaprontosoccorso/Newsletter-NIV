@@ -154,7 +154,7 @@ FILTRO = "Sei un medico di PS/terapia intensiva esperto in insufficienza respira
 
 
 def filtra_top(candidati):
-    if len(candidati) <= ARTICOLI_FINALI: return candidati
+    if len(candidati) <= ARTICOLI_FINALI: return candidati, True
     blocchi = [f"PMID: {a['pmid']}\nRIVISTA: {a['rivista']}\nTITOLO: {a['titolo']}\nABSTRACT: {a['abstract'][:700]}" for a in candidati]
     risposta = chiama_claude(FILTRO.format(articoli="\n---\n".join(blocchi)), 200)
     pmids = re.findall(r"\b\d{7,9}\b", risposta)[:ARTICOLI_FINALI]
@@ -168,8 +168,8 @@ def filtra_top(candidati):
             key=lambda a: a["pubdate_dt"] or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
         )
-        selezionati = ordinati[:ARTICOLI_FINALI]
-    return selezionati
+        return ordinati[:ARTICOLI_FINALI], True
+    return selezionati, False
 
 def sintetizza(art):
     prompt = cfg.PROMPT_SINTESI.format(titolo=art["titolo"], autori=art["autori"],
@@ -187,7 +187,7 @@ def sintetizza(art):
         art["rilevanza"] = ""
     return art
 
-def build_html(articoli):
+def build_html(articoli, fallback=False):
     wl = numero_settimana()
     arts = ""
     for i, a in enumerate(articoli):
@@ -201,7 +201,12 @@ def build_html(articoli):
             ab = f'<details style="margin-bottom:10px;"><summary style="font-family:monospace;font-size:10px;color:#0a4d68;cursor:pointer;letter-spacing:1px;text-transform:uppercase;list-style:none;">Abstract (EN)</summary><p style="font-family:Georgia,serif;font-size:12px;color:#666;line-height:1.65;margin-top:8px;padding:10px 12px;background:#fafafa;border:1px solid #eee;">{a["abstract"]}</p></details>'
         arts += f'<tr><td style="padding:28px 32px 24px;border-bottom:1px solid #dde8dd;"><div style="margin-bottom:10px;"><span style="font-family:monospace;font-size:12px;color:{COLOR_ACCENT};font-weight:700;">{str(i+1).zfill(2)}</span> <span style="font-family:monospace;font-size:11px;color:#aaa;">{a["rivista"]} - {a["data"]}</span></div><a href="{a["url"]}" style="font-family:Georgia,serif;font-size:19px;font-weight:700;color:#1a1a1a;text-decoration:none;line-height:1.35;display:block;margin-bottom:6px;">{a["titolo"]}</a><div style="font-family:monospace;font-size:12px;color:#999;font-style:italic;margin-bottom:14px;">{a["autori"]}</div>{syn}{ab}<div><a href="{a["url"]}" style="font-family:monospace;font-size:11px;color:#0a4d68;text-decoration:none;">PubMed {a["pmid"]}</a>{doi}</div></td></tr>'
     niv_str = " - ".join(r["nlmta"] for r in cfg.RIVISTE_NIV)
-    return f'''<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{cfg.NOME_NEWSLETTER}</title></head><body style="margin:0;padding:0;background:#eaf0ea;"><table width="100%" cellpadding="0" cellspacing="0" bgcolor="#eaf0ea"><tr><td align="center" style="padding:32px 16px;"><table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;"><tr><td style="background:{cfg.COLOR_DARK};padding:0;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:{COLOR_ACCENT};height:4px;"></td></tr><tr><td style="padding:28px 32px 24px;"><div style="font-family:monospace;font-size:10px;color:#778;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">{cfg.NOME_SERVIZIO}</div><h1 style="font-family:Georgia,serif;font-size:32px;color:#ffffff;margin:0 0 6px;font-weight:700;">NIV Weekly<br/><em style="color:{COLOR_ACCENT};font-style:italic;">Digest</em></h1><div style="font-family:monospace;font-size:11px;color:#667;">Settimana {wl["settimana"]} - {wl["giorno"]} {wl["mese"]} {wl["anno"]} - {len(articoli)} articoli</div></td><td style="padding:28px 32px 24px;text-align:right;vertical-align:top;"><div style="font-family:monospace;font-size:52px;font-weight:700;color:#2a3a2e;letter-spacing:-3px;line-height:1;">{str(wl["settimana"]).zfill(2)}</div><div style="font-family:monospace;font-size:10px;color:#556;letter-spacing:3px;">WEEK</div></td></tr></table></td></tr><tr><td style="background:#f0f5f0;padding:12px 32px;border-bottom:2px solid {cfg.COLOR_DARK};"><span style="font-family:monospace;font-size:10px;color:#889;letter-spacing:1px;">NIV: {niv_str} + generaliste</span></td></tr><tr><td style="background:#ffffff;"><table width="100%" cellpadding="0" cellspacing="0">{arts}</table></td></tr><tr><td style="background:{cfg.COLOR_DARK};padding:22px 32px;"><p style="font-family:monospace;font-size:10px;color:#556;margin:0;line-height:1.8;">Generato con Claude Sonnet 4.6 - Fonte: PubMed RSS<br/>Sintesi AI - verificare le fonti primarie.</p></td></tr></table></td></tr></table></body></html>'''
+    disclaimer = ('<tr><td style="background:#fff8e1;padding:14px 32px;border-bottom:1px solid #f0e0a0;">'
+                  '<p style="font-family:Georgia,serif;font-size:13px;color:#8a6d00;margin:0;line-height:1.5;">'
+                  '<strong>Nota:</strong> questa settimana non sono stati individuati articoli dedicati '
+                  'specificamente alla ventilazione non invasiva. Di seguito una selezione di articoli '
+                  'recenti su temi respiratori e di area critica correlati.</p></td></tr>') if fallback else ''
+    return f'''<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{cfg.NOME_NEWSLETTER}</title></head><body style="margin:0;padding:0;background:#eaf0ea;"><table width="100%" cellpadding="0" cellspacing="0" bgcolor="#eaf0ea"><tr><td align="center" style="padding:32px 16px;"><table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;"><tr><td style="background:{cfg.COLOR_DARK};padding:0;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:{COLOR_ACCENT};height:4px;"></td></tr><tr><td style="padding:28px 32px 24px;"><div style="font-family:monospace;font-size:10px;color:#778;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">{cfg.NOME_SERVIZIO}</div><h1 style="font-family:Georgia,serif;font-size:32px;color:#ffffff;margin:0 0 6px;font-weight:700;">NIV Weekly<br/><em style="color:{COLOR_ACCENT};font-style:italic;">Digest</em></h1><div style="font-family:monospace;font-size:11px;color:#667;">Settimana {wl["settimana"]} - {wl["giorno"]} {wl["mese"]} {wl["anno"]} - {len(articoli)} articoli</div></td><td style="padding:28px 32px 24px;text-align:right;vertical-align:top;"><div style="font-family:monospace;font-size:52px;font-weight:700;color:#2a3a2e;letter-spacing:-3px;line-height:1;">{str(wl["settimana"]).zfill(2)}</div><div style="font-family:monospace;font-size:10px;color:#556;letter-spacing:3px;">WEEK</div></td></tr></table></td></tr><tr><td style="background:#f0f5f0;padding:12px 32px;border-bottom:2px solid {cfg.COLOR_DARK};"><span style="font-family:monospace;font-size:10px;color:#889;letter-spacing:1px;">NIV: {niv_str} + generaliste</span></td></tr>{disclaimer}<tr><td style="background:#ffffff;"><table width="100%" cellpadding="0" cellspacing="0">{arts}</table></td></tr><tr><td style="background:{cfg.COLOR_DARK};padding:22px 32px;"><p style="font-family:monospace;font-size:10px;color:#556;margin:0;line-height:1.8;">Generato con Claude Sonnet 4.6 - Fonte: PubMed RSS<br/>Sintesi AI - verificare le fonti primarie.</p></td></tr></table></td></tr></table></body></html>'''
 
 def invia_email(oggetto, html):
     app_password = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -236,8 +241,8 @@ def main():
     if not candidati:
         log.error("Nessun articolo trovato")
         return False
-    selezionati = filtra_top(candidati)
-    log.info(f"Selezionati {len(selezionati)} articoli")
+    selezionati, fallback = filtra_top(candidati)
+    log.info(f"Selezionati {len(selezionati)} articoli{' (fallback)' if fallback else ''}")
     if not selezionati:
         log.error("Filtro vuoto")
         return False
@@ -246,7 +251,7 @@ def main():
         log.info(f"  Sintesi {i+1}/{len(selezionati)}: {art['pmid']}")
         selezionati[i] = sintetizza(art)
         time.sleep(1)
-    html = build_html(selezionati)
+    html = build_html(selezionati, fallback)
     ok = invia_email(f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}", html)
     log.info("=== OK ===" if ok else "=== FALLITO ===")
     return ok
