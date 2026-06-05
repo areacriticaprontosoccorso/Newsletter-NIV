@@ -150,7 +150,7 @@ def chiama_claude(prompt, max_tokens=1500):
         body = e.read().decode("utf-8")
         raise RuntimeError(f"API errore {e.code}: {body[:400]}")
 
-FILTRO = "Sei un medico di PS esperto in ventilazione non invasiva. Dalla lista sotto, seleziona SOLO i 5 articoli che trattano DIRETTAMENTE ed ESPLICITAMENTE uno di questi argomenti: ventilazione non invasiva (NIV/BiPAP/BiLevel), CPAP, High-Flow Nasal Cannula (HFNC/HNFO), insufficienza respiratoria acuta ipossiemica o ipercapnica, ARDS e strategie ventilatorie non invasive, edema polmonare acuto cardiogeno trattato con supporto ventilatorio, riacutizzazione BPCO con NIV, weaning e post-estubazione con NIV/HFNC, interfacce e devices per ventilazione non invasiva, monitoraggio respiratorio durante NIV. ESCLUDI TASSATIVAMENTE articoli che non menzionano esplicitamente NIV, CPAP, HFNC, HNFO, supporto ventilatorio o insufficienza respiratoria acuta nel titolo o abstract, anche se provengono da riviste di critical care. Escludi: cardiologia, neurologia, sepsi senza focus ventilatorio, chirurgia, oncologia, nefrologia, endocrinologia, infettivologia generica, case reports, lettere, errata, commenti. Se non trovi 5 articoli pertinenti, restituisci SOLO quelli realmente pertinenti (anche 1 o 2). ARTICOLI:\n{articoli}\n\nRestituisci SOLO i PMID pertinenti, uno per riga, nessun commento."
+FILTRO = "Sei un medico di PS/terapia intensiva esperto in insufficienza respiratoria acuta e supporto ventilatorio. Dalla lista sotto, seleziona i 5 articoli PIU' PERTINENTI alla gestione del paziente con problemi respiratori acuti. Sono PERTINENTI gli articoli che trattano, anche solo in parte: ventilazione non invasiva (NIV/BiPAP/BiLevel), CPAP, High-Flow Nasal Cannula (HFNC/HFNO), ossigenoterapia, insufficienza respiratoria acuta ipossiemica o ipercapnica, ARDS e strategie ventilatorie, edema polmonare acuto cardiogeno, riacutizzazione BPCO, asma acuto grave, polmonite con insufficienza respiratoria, ventilazione meccanica invasiva, weaning e post-estubazione, intubazione e gestione delle vie aeree nel paziente critico, monitoraggio respiratorio, emogasanalisi e scambi gassosi, sedazione/analgesia nel paziente ventilato, outcome del paziente con insufficienza respiratoria. Dai priorita' agli articoli con focus ventilatorio non invasivo, ma includi anche i temi correlati sopra se mancano articoli strettamente su NIV. Escludi solo cio' che e' chiaramente fuori tema (cardiologia interventistica, neurologia, oncologia, nefrologia, endocrinologia, chirurgia non toracica) e i case reports, lettere, errata, commenti. Se trovi meno di 5 articoli pertinenti restituisci quelli che ci sono; se nessuno e' pertinente in senso stretto, scegli comunque i 5 piu' vicini al tema respiratorio/critico. ARTICOLI:\n{articoli}\n\nRestituisci SOLO i PMID, uno per riga, nessun commento."
 
 
 def filtra_top(candidati):
@@ -160,7 +160,16 @@ def filtra_top(candidati):
     pmids = re.findall(r"\b\d{7,9}\b", risposta)[:ARTICOLI_FINALI]
     log.info(f"Claude selezionati: {pmids}")
     m = {a["pmid"]: a for a in candidati}
-    return [m[p] for p in pmids if p in m]
+    selezionati = [m[p] for p in pmids if p in m]
+    if not selezionati:
+        log.warning("Claude non ha selezionato nulla: fallback ai piu' recenti")
+        ordinati = sorted(
+            candidati,
+            key=lambda a: a["pubdate_dt"] or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        selezionati = ordinati[:ARTICOLI_FINALI]
+    return selezionati
 
 def sintetizza(art):
     prompt = cfg.PROMPT_SINTESI.format(titolo=art["titolo"], autori=art["autori"],
