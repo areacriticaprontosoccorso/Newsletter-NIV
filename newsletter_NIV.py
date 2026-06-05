@@ -230,6 +230,96 @@ def invia_email(oggetto, html):
         log.error(f"Invio fallito: {e}")
         return False
 
+
+# ─── Telegram ────────────────────────────────────────────────
+
+NIV_PAGE_URL = "https://areacriticaprontosoccorso.github.io/Newsletter-NIV/"
+
+def telegram_send_message(bot_token, chat_id, text):
+    payload = json.dumps({
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": False,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            resp = json.loads(r.read().decode("utf-8"))
+        if not resp.get("ok"):
+            log.error(f"Telegram API errore: {resp}")
+            return False
+        return True
+    except Exception as e:
+        log.error(f"Telegram invio fallito: {e}")
+        return False
+
+def build_tg_header(articoli, fallback):
+    wl = numero_settimana()
+    testo = (
+        f"🫁 <b>NIV Weekly Digest</b>\n"
+        f"Settimana {wl['settimana']} · {wl['giorno']} {wl['mese']} {wl['anno']}\n"
+        f"<i>{cfg.NOME_SERVIZIO}</i>\n\n"
+        f"📚 {len(articoli)} articoli questa settimana\n"
+    )
+    if fallback:
+        testo += ("\n⚠️ <i>Questa settimana non sono stati individuati articoli dedicati "
+                  "specificamente alla NIV. Di seguito una selezione di articoli recenti su "
+                  "temi respiratori e di area critica correlati.</i>\n")
+    return testo + ("━" * 25)
+
+def build_tg_articolo(i, a):
+    parti = [f"<b>{i}. {a['titolo']}</b>", f"<i>{a['rivista']} · {a['data']}</i>"]
+    if a.get("autori"):
+        parti.append(f"👤 {a['autori']}")
+    parti.append("")
+    if a.get("sintesi_it"):
+        parti.append(a["sintesi_it"])
+    if a.get("rilevanza"):
+        parti.append(f"\n🎯 <b>Rilevanza:</b> {a['rilevanza']}")
+    parti.append("")
+    link = f'🔗 <a href="{a["url"]}">PubMed {a["pmid"]}</a>'
+    if a.get("doi"):
+        link += f' · <a href="https://doi.org/{a["doi"]}">DOI</a>'
+    parti.append(link)
+    return "\n".join(parti)
+
+def build_tg_footer():
+    return (
+        f"{'━' * 25}\n"
+        f"📬 <a href=\"{NIV_PAGE_URL}\">Iscriviti alla newsletter via email</a>\n"
+        f"🤖 Sintesi generate con Claude · Fonte: PubMed\n"
+        f"⚠️ Le sintesi AI vanno verificate sulle fonti primarie."
+    )
+
+def invia_telegram(articoli, fallback=False):
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if not bot_token or not chat_id:
+        log.warning("TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID mancanti - salto Telegram")
+        return False
+    successi = 0
+    if telegram_send_message(bot_token, chat_id, build_tg_header(articoli, fallback)):
+        successi += 1
+    time.sleep(1)
+    for i, a in enumerate(articoli, 1):
+        msg = build_tg_articolo(i, a)
+        if len(msg) > 4096:
+            msg = msg[:4090] + "\n…"
+        if telegram_send_message(bot_token, chat_id, msg):
+            successi += 1
+        time.sleep(1)
+    if telegram_send_message(bot_token, chat_id, build_tg_footer()):
+        successi += 1
+    totale = len(articoli) + 2
+    log.info(f"Telegram: inviati {successi}/{totale} messaggi a {chat_id}")
+    return successi == totale
+
 def main():
     cfg.valida_config()
     wl = numero_settimana()
@@ -252,9 +342,11 @@ def main():
         selezionati[i] = sintetizza(art)
         time.sleep(1)
     html = build_html(selezionati, fallback)
-    ok = invia_email(f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}", html)
-    log.info("=== OK ===" if ok else "=== FALLITO ===")
-    return ok
+    ok_email = invia_email(f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}", html)
+    ok_telegram = invia_telegram(selezionati, fallback)
+    log.info("=== Email: OK ===" if ok_email else "=== Email: FALLITO ===")
+    log.info("=== Telegram: OK ===" if ok_telegram else "=== Telegram: FALLITO o non configurato ===")
+    return ok_email
 
 if __name__ == "__main__":
     main()
