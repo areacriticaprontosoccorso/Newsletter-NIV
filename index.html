@@ -45,10 +45,10 @@
     .panel-title { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; margin-bottom: 0.4rem; }
     .panel-sub { font-size: 14px; color: rgba(255,255,255,0.45); margin-bottom: 1.5rem; line-height: 1.5; }
     .input-row { display: flex; gap: 0; width: 100%; }
-    input[type="email"] { flex: 1; height: 62px; padding: 0 22px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-right: none; border-radius: 12px 0 0 12px; color: #fff; font-family: 'Instrument Sans', sans-serif; font-size: 17px; outline: none; transition: border-color 0.2s, background 0.2s; }
+    input[type="email"] { flex: 1; height: 84px; padding: 0 22px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; color: #fff; font-family: 'Instrument Sans', sans-serif; font-size: 17px; outline: none; transition: border-color 0.2s, background 0.2s; }
     input[type="email"]::placeholder { color: rgba(255,255,255,0.22); }
     input[type="email"]:focus { border-color: rgba(224,32,32,0.6); background: rgba(255,255,255,0.09); }
-    .submit-btn { height: 62px; padding: 0 14px; border: none; border-radius: 0 12px 12px 0; font-family: 'Instrument Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity 0.2s, transform 0.1s; }
+    .submit-btn { height: 52px; align-self: flex-start; margin-left: 6px; padding: 0 14px; border: none; border-radius: 12px; font-family: 'Instrument Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity 0.2s, transform 0.1s; }
     .submit-btn:active { transform: scale(0.97); }
     .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     #subscribe-btn { background: var(--red); color: #fff; }
@@ -56,6 +56,8 @@
     #unsubscribe-btn { background: #555; color: #fff; }
     #unsubscribe-btn:hover { opacity: 0.85; }
     .note { font-size: 11px; color: rgba(255,255,255,0.25); margin-top: 1rem; text-align: center; }
+    .note.note-telegram { font-size: 15px; color: rgba(255,255,255,0.5); margin-top: 0.6rem; }
+    .note.note-telegram a { color: #ff6b6b; font-weight: 600; }
     .feedback { display: none; margin-top: 1.25rem; padding: 14px 18px; border-radius: 10px; font-size: 14px; font-weight: 500; text-align: center; animation: popIn 0.35s ease both; }
     @keyframes popIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
     .feedback.success { background: rgba(224,32,32,0.1); border: 1px solid rgba(224,32,32,0.3); color: #ff6b6b; }
@@ -63,8 +65,8 @@
     .feedback.error { background: rgba(255,100,100,0.1); border: 1px solid rgba(255,100,100,0.3); color: #ff8888; }
     @media (max-width: 480px) {
       .input-row { flex-direction: column; }
-      input[type="email"] { border-right: 1px solid rgba(255,255,255,0.12); border-bottom: none; border-radius: 12px 12px 0 0; width: 100%; }
-      .submit-btn { border-radius: 0 0 12px 12px; width: 100%; }
+      input[type="email"] { border-radius: 12px; width: 100%; }
+      .submit-btn { align-self: stretch; margin-left: 0; margin-top: 8px; border-radius: 12px; width: 100%; }
       .card { padding: 1.5rem 1.1rem; }
       .logo-img { height: 70px; }
     }
@@ -78,8 +80,7 @@
       <img class="logo-img" src="logo.png" alt="Pronto Soccorso Area Critica" />
     </div>
     <div class="headline">
-      <p class="eyebrow">Newsletter</p>
-      <h1>Newsletter di<br><em>Area Critica e Pronto Soccorso</em><br>dell'Ospedale San Giovanni Bosco di Torino a cura di Francesco Panero</h1>
+      <h1>Newsletter di<br><em>Area Critica e Pronto Soccorso</em><br>dell'Ospedale San Giovanni Bosco di Torino a cura di<br><em>Francesco Panero</em></h1>
       <span class="niv-tag">NIV</span>
     </div>
     <div class="divider"></div>
@@ -98,7 +99,7 @@
         <div class="feedback success" id="sub-success" role="status" aria-live="polite">✓ Iscrizione completata! Benvenuto nella newsletter NIV.</div>
         <div class="feedback error" id="sub-error" role="alert" aria-live="assertive">Qualcosa è andato storto. Riprova tra poco.</div>
         <p class="note">Nessuno spam. Disiscrizione in qualsiasi momento.</p>
-        <p class="note">Preferisci Telegram? <a href="https://t.me/emergencyultrasoundschool" style="color:#ff6b6b;">Unisciti al canale</a></p>
+        <p class="note note-telegram">Preferisci Telegram? <a href="https://t.me/emergencyultrasoundschool">Unisciti al canale</a></p>
       </div>
       <div class="panel" id="panel-unsubscribe">
         <p class="panel-title">Rimuovi la tua email</p>
