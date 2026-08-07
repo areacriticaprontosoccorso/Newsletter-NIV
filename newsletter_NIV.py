@@ -4,7 +4,7 @@ Area Critica e Pronto Soccorso San Giovanni Bosco, Torino
 Comando: python newsletter_NIV.py
 
 Selezione a due stadi:
-  1. filtro NIV stretto: solo articoli davvero sul supporto ventilatorio (puo' dare 0);
+  1. filtro NIV stretto: solo articoli davvero sul supporto ventilatorio (può dare 0);
   2. se restano posizioni libere, si riempiono con articoli di medicina d'urgenza
      selezionati con i criteri di EM Weekly Digest (newsletter-ps).
 Ogni articolo porta il campo "origine" ("niv" | "em"), usato per la sintesi
@@ -222,25 +222,22 @@ def raccogli_candidati(giorni=None):
     return ok
 
 
-def chiama_claude(prompt, max_tokens=1500, system=None, temperature=None, prefill=None):
-    """prefill: testo con cui far iniziare la risposta (es. "[" per forzare il JSON).
-    Viene riconcatenato in testa al risultato, perche' l'API restituisce solo la
-    continuazione."""
+def chiama_claude(prompt, max_tokens=1500, system=None):
+    # NB: NON passare "temperature" e NON far terminare la conversazione con un
+    # turno "assistant" di prefill: questo modello rifiuta entrambi con HTTP 400.
+    # Verificato il 03/08/2026 sui log di newsletter-ps. Il formato JSON resta
+    # garantito dal prompt e da _estrai_json_array, che tollera i fence markdown.
     messaggi = [{"role": "user", "content": prompt}]
-    if prefill:
-        messaggi.append({"role": "assistant", "content": prefill})
     corpo = {
         "model":      cfg.ANTHROPIC_MODEL,
         "max_tokens": max_tokens,
         # Sonnet 5 ha l'adaptive thinking attivo di default: lo disattiviamo,
-        # cosi' la risposta e' solo testo e max_tokens non viene speso in thinking.
+        # così la risposta è solo testo e max_tokens non viene speso in thinking.
         "thinking":   {"type": "disabled"},
         "messages":   messaggi,
     }
     if system:
         corpo["system"] = system
-    if temperature is not None:
-        corpo["temperature"] = temperature
     payload = json.dumps(corpo).encode("utf-8")
     # Retry con backoff su rate-limit (429) e errori server transitori (5xx).
     ultimo_errore = None
@@ -262,7 +259,7 @@ def chiama_claude(prompt, max_tokens=1500, system=None, temperature=None, prefil
             testo = next((b.get("text", "") for b in blocchi if b.get("type") == "text"), "")
             if not testo:
                 raise RuntimeError(f"Nessun blocco di testo nella risposta API: {str(data)[:300]}")
-            return (prefill or "") + testo.strip()
+            return testo.strip()
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8")
             ultimo_errore = f"Anthropic API errore {e.code}: {body[:400]}"
@@ -291,7 +288,7 @@ def _limita_candidati(candidati):
         return candidati
     log.warning(
         f"{len(candidati)} candidati: ne invio al filtro i "
-        f"{cfg.MAX_CANDIDATI_PROMPT} piu' recenti"
+        f"{cfg.MAX_CANDIDATI_PROMPT} più recenti"
     )
     return sorted(
         candidati,
@@ -319,8 +316,6 @@ def _filtro_json(candidati, prompt, system, n, max_per_tema=None, etichetta=""):
         prompt,
         max_tokens=cfg.MAX_TOKENS_FILTRO,
         system=system,
-        temperature=cfg.TEMPERATURE_FILTRO,
-        prefill="[",
     )
     for voce in _estrai_json_array(risposta):
         if len(selezionati) >= n:
@@ -337,7 +332,7 @@ def _filtro_json(candidati, prompt, system, n, max_per_tema=None, etichetta=""):
         if any(a["pmid"] == pmid for a in selezionati):
             continue
         if max_per_tema and conteggio_temi.get(tema, 0) >= max_per_tema:
-            log.info(f"    [{etichetta}] {pmid} in riserva: tema '{tema}' gia' saturo")
+            log.info(f"    [{etichetta}] {pmid} in riserva: tema '{tema}' già saturo")
             riserva.append(map_pmid[pmid])
             continue
         conteggio_temi[tema] = conteggio_temi.get(tema, 0) + 1
@@ -348,7 +343,7 @@ def _filtro_json(candidati, prompt, system, n, max_per_tema=None, etichetta=""):
 
 def filtra_niv(candidati, n):
     """Stadio 1: articoli STRETTAMENTE pertinenti al supporto ventilatorio.
-    Puo' restituire una lista vuota: e' un esito legittimo, non un errore."""
+    Può restituire una lista vuota: è un esito legittimo, non un errore."""
     pool = _limita_candidati(candidati)
     prompt = cfg.PROMPT_FILTRO_NIV.format(n=n, articoli=_blocchi_prompt(pool))
     log.info(f"Filtro NIV stretto su {len(pool)} candidati -> max {n}")
@@ -369,7 +364,7 @@ def filtra_em(candidati, esclusi_pmid, n):
     """Stadio 2: articoli di medicina d'urgenza con i criteri di newsletter-ps,
     usati per riempire le posizioni lasciate libere dal filtro NIV.
     Restituisce (selezionati, riserva): la riserva sono gli articoli validi messi
-    da parte dal vincolo di diversita', da usare solo per il riempimento minimo."""
+    da parte dal vincolo di diversità, da usare solo per il riempimento minimo."""
     pool = _limita_candidati([a for a in candidati if a["pmid"] not in esclusi_pmid])
     if not pool:
         return [], []
@@ -384,7 +379,7 @@ def filtra_em(candidati, esclusi_pmid, n):
         log.error(f"Filtro EM fallito ({e})")
         selezionati, riserva = [], []
     # Nessun riempimento per data qui: come in newsletter-ps, se gli articoli
-    # davvero solidi sono meno di n si preferisce un digest piu' corto.
+    # davvero solidi sono meno di n si preferisce un digest più corto.
     for a in selezionati:
         a["origine"] = "em"
     log.info(f"Articoli EM sostitutivi: {len(selezionati)}")
@@ -397,7 +392,7 @@ def componi_selezione(candidati):
     n_tot = cfg.ARTICOLI_FINALI
     niv = filtra_niv(candidati, n_tot)
 
-    if niv is None:  # il filtro non ha risposto: ripiego sui piu' recenti
+    if niv is None:  # il filtro non ha risposto: ripiego sui più recenti
         ordinati = sorted(
             candidati,
             key=lambda a: a["pubdate_dt"] or datetime.min.replace(tzinfo=timezone.utc),
@@ -417,7 +412,7 @@ def componi_selezione(candidati):
     articoli = niv + em
 
     # Riempimento minimo: solo se il digest resta sotto MINIMO_ARTICOLI si attinge
-    # prima alla riserva scartata per diversita', poi ai piu' recenti.
+    # prima alla riserva scartata per diversità, poi ai più recenti.
     if len(articoli) < cfg.MINIMO_ARTICOLI:
         log.warning(
             f"Solo {len(articoli)} articoli (minimo {cfg.MINIMO_ARTICOLI}): "
@@ -481,7 +476,6 @@ def sintetizza(art):
             prompt,
             max_tokens=cfg.MAX_TOKENS_SINTESI_SINGOLA,
             system=system,
-            temperature=cfg.TEMPERATURE_SINTESI,
         )
         sintesi, rilevanza = _parse_sintesi_blocco(r)
         art["sintesi_it"] = sintesi or r[:400]
@@ -515,7 +509,6 @@ def _sintetizza_gruppo(articoli, origine):
             prompt,
             max_tokens=cfg.MAX_TOKENS_SINTESI_MULTI,
             system=system,
-            temperature=cfg.TEMPERATURE_SINTESI,
         )
         pezzi = re.split(r"###\s*PMID:\s*(\d{7,9})", risposta)
         for i in range(1, len(pezzi) - 1, 2):
@@ -547,19 +540,19 @@ def sintetizza_articoli(articoli):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def testo_nota(stato):
-    """Nota sulla composizione del numero. None se il digest e' tutto NIV."""
+    """Nota sulla composizione del numero. None se il digest è tutto NIV."""
     n_niv, n_em = stato["n_niv"], stato["n_em"]
     if stato["filtro_ko"]:
-        return ("Il filtro tematico non e' stato disponibile in questa esecuzione: "
-                "di seguito gli articoli piu' recenti delle riviste monitorate.")
+        return ("Il filtro tematico non è stato disponibile in questa esecuzione: "
+                "di seguito gli articoli più recenti delle riviste monitorate.")
     if n_em == 0:
         return None
     if n_niv == 0:
         return (f"Questa settimana non sono stati pubblicati articoli dedicati al supporto "
                 f"ventilatorio. Al loro posto {n_em} articoli di medicina d'urgenza, "
                 f"selezionati con i criteri di EM Weekly Digest: impatto sulla decisione "
-                f"in Pronto Soccorso, applicabilita' nel nostro contesto, qualita' "
-                f"metodologica, novita'.")
+                f"in Pronto Soccorso, applicabilità nel nostro contesto, qualità "
+                f"metodologica, novità.")
     return (f"Articoli sul supporto ventilatorio disponibili questa settimana: {n_niv}. "
             f"Le altre {n_em} posizioni sono occupate da articoli di medicina d'urgenza, "
             f"selezionati con i criteri di EM Weekly Digest.")
@@ -828,6 +821,19 @@ def main():
         return False
 
     selezionati = sintetizza_articoli(selezionati)
+
+    # Una newsletter senza sintesi in italiano non va spedita: e' il sintomo di
+    # chiamate API fallite, e un digest svuotato erode la fiducia dei lettori
+    # piu' di un invio mancato, che invece si nota e si indaga.
+    con_sintesi = [a for a in selezionati if a.get("sintesi_it")]
+    if len(con_sintesi) < cfg.MINIMO_ARTICOLI:
+        log.error(
+            f"Solo {len(con_sintesi)}/{len(selezionati)} articoli hanno una sintesi "
+            f"(minimo {cfg.MINIMO_ARTICOLI}): INVIO ANNULLATO. "
+            "Controllare gli errori API qui sopra."
+        )
+        return False
+    selezionati = con_sintesi
 
     html_body = build_html(selezionati, stato)
 
