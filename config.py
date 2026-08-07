@@ -3,11 +3,11 @@ Config NIV Weekly Digest — versione sicura per repo pubblico
 
 Logica di selezione a due stadi:
   1. filtro NIV STRETTO  -> solo articoli davvero pertinenti al supporto ventilatorio.
-     Puo' restituire meno di ARTICOLI_FINALI, anche zero.
+     Può restituire meno di ARTICOLI_FINALI, anche zero.
   2. integrazione EM     -> le posizioni rimaste libere vengono riempite con
      articoli di medicina d'urgenza selezionati con i criteri di EM Weekly Digest
-     (newsletter-ps): impatto decisionale, applicabilita', qualita' metodologica,
-     novita'.
+     (newsletter-ps): impatto decisionale, applicabilità, qualità metodologica,
+     novità.
 """
 
 import os
@@ -22,7 +22,7 @@ NCBI_TOOL          = "niv_weekly_digest_torino"
 # RIVISTE
 # ═══════════════════════════════════════════════════════════════════════════════
 # Generaliste / area critica / medicina d'urgenza: allineate a newsletter-ps (15),
-# cosi' il bacino da cui pescare gli articoli EM sostitutivi e' lo stesso.
+# così il bacino da cui pescare gli articoli EM sostitutivi è lo stesso.
 RIVISTE = [
     {"nome": "New England Journal of Medicine", "nlmta": "N Engl J Med",       "issn": "0028-4793"},
     {"nome": "The Lancet",                      "nlmta": "Lancet",             "issn": "0140-6736"},
@@ -37,7 +37,7 @@ RIVISTE = [
     {"nome": "Academic Emergency Medicine",     "nlmta": "Acad Emerg Med",     "issn": "1069-6563"},
     {"nome": "Emergency Medicine Journal",      "nlmta": "Emerg Med J",        "issn": "1472-0205"},
     {"nome": "Stroke",                          "nlmta": "Stroke",             "issn": "0039-2499"},
-    # Critical Care e' solo online: se il feed torna vuoto, usare l'eISSN 1466-609X.
+    # Critical Care è solo online: se il feed torna vuoto, usare l'eISSN 1466-609X.
     {"nome": "Critical Care",                   "nlmta": "Crit Care",          "issn": "1364-8535"},
     {"nome": "Annals of Intensive Care",        "nlmta": "Ann Intensive Care", "issn": "2110-5820"},
 ]
@@ -54,7 +54,7 @@ RIVISTE_NIV = [
 # ═══════════════════════════════════════════════════════════════════════════════
 ARTICOLI_FINALI       = 5    # posizioni totali nel digest
 GIORNI_RICERCA        = 7
-GIORNI_RICERCA_ESTESO = 14   # fallback se la settimana e' povera
+GIORNI_RICERCA_ESTESO = 14   # fallback se la settimana è povera
 MINIMO_ARTICOLI       = 3    # sotto questa soglia si riempie per data
 MAX_PER_TEMA          = 2    # max articoli sullo stesso tema clinico (parte EM)
 MAX_CANDIDATI_PROMPT  = 150  # tetto di candidati inviati a ogni filtro
@@ -63,11 +63,10 @@ MAX_CANDIDATI_PROMPT  = 150  # tetto di candidati inviati a ogni filtro
 # False = comportamento "solo NIV": il digest esce corto.
 INTEGRA_CON_EM = True
 
+# NB: NON reintrodurre "temperature": è deprecato per questo modello (HTTP 400).
 MAX_TOKENS_FILTRO          = 800
 MAX_TOKENS_SINTESI_MULTI   = 4000
 MAX_TOKENS_SINTESI_SINGOLA = 800
-TEMPERATURE_FILTRO  = 0.2
-TEMPERATURE_SINTESI = 0.3
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PRE-FILTRO DETERMINISTICO (portato da newsletter-ps)
@@ -128,14 +127,14 @@ colleghi del tuo reparto.
 # ═══════════════════════════════════════════════════════════════════════════════
 # STADIO 1 — FILTRO NIV STRETTO
 # ═══════════════════════════════════════════════════════════════════════════════
-# Differenza chiave rispetto alla versione precedente: NON e' consentito
-# "riempire" con articoli genericamente respiratori. Se non c'e' nulla di
-# pertinente, la risposta corretta e' un array vuoto.
+# Differenza chiave rispetto alla versione precedente: NON è consentito
+# "riempire" con articoli genericamente respiratori. Se non c'è nulla di
+# pertinente, la risposta corretta è un array vuoto.
 PROMPT_FILTRO_NIV = """COMPITO: dalla lista di articoli candidati, seleziona AL MASSIMO {n}
 articoli STRETTAMENTE pertinenti alla gestione del supporto respiratorio nel paziente
 acuto. Puoi restituirne meno di {n}, e anche nessuno.
 
-E' PERTINENTE un articolo il cui oggetto di studio e' uno di questi:
+E' PERTINENTE un articolo il cui oggetto di studio è uno di questi:
 - ventilazione non invasiva (NIV/BiPAP/bilevel), CPAP, casco;
 - high-flow nasal cannula / ossigenoterapia ad alti flussi;
 - ossigenoterapia e target di ossigenazione;
@@ -149,7 +148,7 @@ E' PERTINENTE un articolo il cui oggetto di studio e' uno di questi:
 - monitoraggio respiratorio, emogasanalisi, scambi gassosi, drive respiratorio, P-SILI;
 - sedazione e analgesia specificamente nel paziente ventilato.
 
-NON e' pertinente — e va escluso anche se contiene la parola "respiratorio":
+NON è pertinente — e va escluso anche se contiene la parola "respiratorio":
 - studi di pneumologia cronica ambulatoriale (asma stabile, BPCO stabile, OSAS
   elettiva, fibrosi, riabilitazione respiratoria, cessazione del fumo);
 - epidemiologia o prevenzione delle infezioni respiratorie senza dati sul supporto
@@ -166,14 +165,14 @@ ARTICOLI CANDIDATI:
 
 FORMATO DI RISPOSTA - restituisci SOLO un array JSON valido, senza testo prima o dopo,
 senza blocchi markdown. Scegli esclusivamente PMID presenti nella lista qui sopra:
-non inventare ne' modificare PMID. Se nessun articolo e' pertinente restituisci
+non inventare né modificare PMID. Se nessun articolo è pertinente restituisci
 esattamente: []
 
 [
   {{"pmid": "12345678", "tema": "HFNC", "perche": "motivo in max 15 parole"}}
 ]
 
-Ordina dal piu' rilevante al meno rilevante."""
+Ordina dal più rilevante al meno rilevante."""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STADIO 2 — FILTRO EM (criteri di newsletter-ps)
@@ -182,15 +181,15 @@ PROMPT_FILTRO_EM = """COMPITO: dalla lista di articoli candidati, seleziona al m
 quelli con il maggior impatto sulla pratica clinica quotidiana in Pronto Soccorso,
 Medicina d'Urgenza e Terapia Intensiva.
 
-CRITERI DI SELEZIONE, in ordine di priorita' decrescente:
-1. IMPATTO DECISIONALE - l'articolo puo' modificare una decisione presa in PS nelle
+CRITERI DI SELEZIONE, in ordine di priorità decrescente:
+1. IMPATTO DECISIONALE - l'articolo può modificare una decisione presa in PS nelle
    prime ore: triage, scelta diagnostica, terapia, destinazione del paziente.
-2. APPLICABILITA' - l'intervento e' realizzabile nel contesto descritto sopra.
+2. APPLICABILITA' - l'intervento è realizzabile nel contesto descritto sopra.
    Scarta studi su farmaci non disponibili in Italia o su risorse assenti.
 3. QUALITA' METODOLOGICA - trial randomizzati, meta-analisi e revisioni sistematiche
-   prima di studi osservazionali; numerosita' adeguata; endpoint clinici anziche' surrogati.
-4. NOVITA' - a parita' di tutto il resto, preferisci cio' che cambia o ribalta una
-   pratica consolidata rispetto a cio' che conferma quanto gia' noto.
+   prima di studi osservazionali; numerosità adeguata; endpoint clinici anziché surrogati.
+4. NOVITA' - a parità di tutto il resto, preferisci ciò che cambia o ribalta una
+   pratica consolidata rispetto a ciò che conferma quanto già noto.
 
 VINCOLI DI COMPOSIZIONE:
 - Massimo 2 articoli sullo stesso tema clinico (es. non 3 studi sulla sepsi).
@@ -205,26 +204,26 @@ ESCLUDI:
 
 IMPORTANTE: se meno di {n} articoli soddisfano davvero questi criteri, restituiscine
 di meno. Non completare la lista con articoli mediocri: una selezione di 3 articoli
-solidi e' preferibile a 5 di cui 2 irrilevanti.
+solidi è preferibile a 5 di cui 2 irrilevanti.
 
 ARTICOLI CANDIDATI:
 {articoli}
 
 FORMATO DI RISPOSTA - restituisci SOLO un array JSON valido, senza testo prima o dopo,
 senza blocchi markdown. Scegli esclusivamente PMID presenti nella lista qui sopra:
-non inventare ne' modificare PMID.
+non inventare né modificare PMID.
 
 [
   {{"pmid": "12345678", "tema": "sepsi", "perche": "motivo in max 15 parole"}}
 ]
 
-Ordina dal piu' rilevante al meno rilevante."""
+Ordina dal più rilevante al meno rilevante."""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SINTESI
 # ═══════════════════════════════════════════════════════════════════════════════
 REGOLE_COMUNI = """Attieniti SOLO ai dati dell'abstract: non aggiungere, non inferire, non inventare.
-NON alterare numeri, dosi, unita' di misura, percentuali: riporta cifre e separatore
+NON alterare numeri, dosi, unità di misura, percentuali: riporta cifre e separatore
 decimale esattamente come nell'originale (0.85; p<0.001).
 Traduci il significato clinico, mai parola per parola: "severe"=grave, "evidence"=prove,
 "consistent"=coerente, "rate"=tasso, "compliance"=aderenza, "management"=gestione.
@@ -282,7 +281,7 @@ RILEVANZA: [testo]"""
 # --- EM: focus generale sulla pratica in PS ------------------------------------
 PROMPT_SINTESI_MULTI_EM = """Analizza OGNI articolo della lista e produci per ciascuno, in italiano:
 1. SINTESI: 3-4 frasi che rispondano a — quesito clinico, disegno dello studio e
-   popolazione con numerosita', risultato principale con i numeri chiave e la misura
+   popolazione con numerosità, risultato principale con i numeri chiave e la misura
    di effetto, ricaduta sulla pratica in PS/Area Critica
 2. RILEVANZA: una sola frase, massimo 30 parole, sulla ricaduta pratica concreta
    in Pronto Soccorso
@@ -299,7 +298,7 @@ RILEVANZA: [testo]"""
 
 PROMPT_SINTESI_EM = """Analizza questo articolo e produci in italiano:
 1. SINTESI: 3-4 frasi che rispondano a — quesito clinico, disegno e popolazione con
-   numerosita', risultato principale con i numeri chiave e la misura di effetto,
+   numerosità, risultato principale con i numeri chiave e la misura di effetto,
    ricaduta sulla pratica in PS/Area Critica
 2. RILEVANZA: una sola frase, massimo 30 parole, sulla ricaduta pratica concreta
 
