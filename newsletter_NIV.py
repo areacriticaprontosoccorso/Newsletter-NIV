@@ -733,12 +733,14 @@ def testo_nota(stato):
     if n_em == 0:
         return None
     if n_niv == 0:
-        return (f"Questa settimana non sono stati pubblicati articoli dedicati al supporto "
-                f"ventilatorio. Al loro posto {n_em} articoli di medicina d'urgenza, "
+        return (f"Questa settimana la letteratura non ha prodotto articoli sul supporto "
+                f"ventilatorio NON invasivo in acuto. Al loro posto {n_em} articoli di "
+                f"medicina d'urgenza, "
                 f"selezionati con i criteri di EM Weekly Digest: impatto sulla decisione "
                 f"in Pronto Soccorso, applicabilità nel nostro contesto, qualità "
                 f"metodologica, novità.")
-    return (f"Articoli sul supporto ventilatorio disponibili questa settimana: {n_niv}. "
+    return (f"Articoli sul supporto ventilatorio non invasivo disponibili questa "
+            f"settimana: {n_niv}. "
             f"Le altre {n_em} posizioni sono occupate da articoli di medicina d'urgenza, "
             f"selezionati con i criteri di EM Weekly Digest.")
 
@@ -825,7 +827,10 @@ def build_html(articoli, stato):
             f'<div><a href="{esc(a["url"])}" style="font-family:monospace;font-size:11px;color:#0a4d68;text-decoration:none;">PubMed {esc(a["pmid"])}</a>{doi}</div>'
             '</td></tr>'
         )
-    niv_str = " - ".join(r["nlmta"] for r in cfg.RIVISTE_NIV)
+    _niv_nomi = [r["nlmta"] for r in cfg.RIVISTE_NIV]
+    niv_str = " - ".join(_niv_nomi[:5])
+    if len(_niv_nomi) > 5:
+        niv_str += f" e altre {len(_niv_nomi) - 5}"
     nota = testo_nota(stato)
     disclaimer = (
         '<tr><td style="background:#fff8e1;padding:14px 32px;border-bottom:1px solid #f0e0a0;">'
