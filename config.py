@@ -16,6 +16,11 @@ ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL    = "claude-sonnet-5"
 GMAIL_USER         = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+
+# Modalità prova a vuoto: esegue tutta la pipeline (feed, efetch, filtro, sintesi)
+# ma NON invia né email né Telegram; scrive l'HTML su file e logga la selezione.
+DRY_RUN      = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes", "si")
+DRY_RUN_FILE = "anteprima_digest.html"
 NCBI_TOOL          = "niv_weekly_digest_torino"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -57,6 +62,10 @@ GIORNI_RICERCA        = 7
 GIORNI_RICERCA_ESTESO = 14   # fallback se la settimana è povera
 MINIMO_ARTICOLI       = 3    # sotto questa soglia si riempie per data
 MAX_PER_TEMA          = 2    # max articoli sullo stesso tema clinico (parte EM)
+# La newsletter è sulla ventilazione NON invasiva: la ventilazione invasiva entra
+# solo quando è in continuità con essa (fallimento della NIV, preossigenazione,
+# supporto dopo l'estubazione). Questo è il tetto di articoli di quel tipo.
+MAX_COLLEGATI         = 2    # max articoli categoria "collegata" su ARTICOLI_FINALI
 MAX_CANDIDATI_PROMPT  = 150  # tetto di candidati inviati a ogni filtro
 
 # Integrazione con articoli di medicina d'urgenza quando mancano articoli NIV.
@@ -84,7 +93,59 @@ ESCLUSIONI_TITOLO = [
     r"^podcast\b", r"^book review\b",
 ]
 
-ABSTRACT_MIN_CHARS = 200
+ABSTRACT_MIN_CHARS = 120
+
+# Troncatura degli abstract passati al modello. Al FILTRO basta l'inizio; alla
+# SINTESI serve tutto: con gli abstract completi di efetch, 2000 caratteri
+# mutilavano i trial maggiori.
+ABSTRACT_MAX_FILTRO  = 700
+ABSTRACT_MAX_SINTESI = 6000
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E-UTILITIES efetch — abstract veri e tipi di pubblicazione
+# ═══════════════════════════════════════════════════════════════════════════════
+# Il feed RSS di PubMed non contiene l'abstract per una larga quota di record
+# (segnaposto di 11 caratteri) né il campo PublicationType. efetch fornisce
+# entrambi con una sola richiesta per lotto di PMID.
+EFETCH_URL     = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+EFETCH_BATCH   = 200
+EFETCH_TIMEOUT = 30
+EFETCH_RETRY   = 2     # tentativi aggiuntivi prima di degradare sulla description RSS
+NCBI_EMAIL     = ""    # opzionale: NCBI chiede un contatto per usi automatizzati
+
+# PublicationType da escludere: etichette ufficiali PubMed, esatte e non euristiche.
+# "Review" e "Practice Guideline" NON sono qui: revisioni sistematiche e linee guida
+# sono fra i contenuti più utili del digest.
+PUBTYPE_ESCLUSI = {
+    "Letter", "Comment", "Editorial", "Published Erratum", "Retraction of Publication",
+    "Retracted Publication", "Expression of Concern", "Case Reports", "News",
+    "Newspaper Article", "Biography", "Historical Article", "Portrait", "Interview",
+    "Congress", "Video-Audio Media", "Address", "Autobiography", "Bibliography",
+    "Personal Narrative", "Introductory Journal Article", "Patient Education Handout",
+}
+
+# Sintesi di letteratura senza dati primari: su questi il badge "revisione" viene
+# imposto in codice. "Meta-Analysis" è escluso di proposito, perché produce stime
+# quantitative proprie e può legittimamente essere "cambia-pratica".
+PUBTYPE_REVISIONE = {
+    "Review", "Systematic Review", "Scoping Review", "Practice Guideline",
+    "Guideline", "Consensus Development Conference",
+    "Consensus Development Conference, NIH",
+}
+
+# Classificazione dell'articolo -> badge nell'email. Le chiavi sono i soli valori
+# accettati dal parser: qualunque altro valore viene scartato.
+TIPI_ARTICOLO = {
+    "cambia-pratica": {"label": "Cambia la pratica", "colore": "#c41e3a"},
+    "conferma":       {"label": "Conferma",          "colore": "#4a7c59"},
+    "controverso":    {"label": "Controverso",       "colore": "#b8860b"},
+    "esplorativo":    {"label": "Esplorativo",       "colore": "#6b7a8f"},
+    "revisione":      {"label": "Revisione",         "colore": "#6f5b8e"},
+}
+
+# Frase fissa richiesta al modello quando l'abstract non permette di giudicare:
+# essendo fissa, in build_html si può decidere di non stampare la riga.
+LIMITE_NON_DESUMIBILE = "Limiti non desumibili dall'abstract."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # BRANDING
@@ -112,9 +173,10 @@ CONTESTO_PS = """CONTESTO DEL LETTORE:
   in commercio in Italia e risorse realisticamente disponibili."""
 
 SYSTEM_FILTRO_NIV = """Sei un medico di Area Critica e Pronto Soccorso italiano, esperto
-di insufficienza respiratoria acuta e supporto ventilatorio. Selezioni la letteratura
-settimanale sul tema per i colleghi del tuo reparto. Sei severo: preferisci una
-selezione corta e centrata a una lunga e annacquata.
+di insufficienza respiratoria acuta e di ventilazione NON invasiva. Selezioni la
+letteratura settimanale sul supporto respiratorio non invasivo per i colleghi del tuo
+reparto. Sei severo: preferisci una selezione corta e centrata a una lunga e annacquata,
+e non lasci che la newsletter scivoli sulla ventilazione invasiva in terapia intensiva.
 
 """ + CONTESTO_PS
 
@@ -131,34 +193,51 @@ colleghi del tuo reparto.
 # "riempire" con articoli genericamente respiratori. Se non c'è nulla di
 # pertinente, la risposta corretta è un array vuoto.
 PROMPT_FILTRO_NIV = """COMPITO: dalla lista di articoli candidati, seleziona AL MASSIMO {n}
-articoli STRETTAMENTE pertinenti alla gestione del supporto respiratorio nel paziente
-acuto. Puoi restituirne meno di {n}, e anche nessuno.
+articoli pertinenti al supporto respiratorio NON INVASIVO nel paziente acuto.
+Puoi restituirne meno di {n}, e anche nessuno.
 
-E' PERTINENTE un articolo il cui oggetto di studio è uno di questi:
-- ventilazione non invasiva (NIV/BiPAP/bilevel), CPAP, casco;
-- high-flow nasal cannula / ossigenoterapia ad alti flussi;
-- ossigenoterapia e target di ossigenazione;
-- insufficienza respiratoria acuta ipossiemica o ipercapnica;
-- ARDS e strategie ventilatorie;
-- edema polmonare acuto cardiogeno trattato con supporto ventilatorio;
+La newsletter è dedicata alla ventilazione NON invasiva. La ventilazione invasiva
+non è il suo argomento: entra solo quando è in continuità diretta con la gestione
+non invasiva. Classifica quindi ogni articolo che selezioni in una di due categorie.
+
+CATEGORIA "non-invasiva" — il nucleo della newsletter, da privilegiare sempre.
+L'oggetto dello studio è:
+- ventilazione non invasiva (NIV, BiPAP, bilevel), CPAP, casco, maschere e interfacce;
+- ossigenoterapia ad alti flussi (HFNC), ossigenoterapia convenzionale e target
+  di ossigenazione;
+- insufficienza respiratoria acuta ipossiemica o ipercapnica trattata senza intubazione;
+- edema polmonare acuto cardiogeno trattato con supporto non invasivo;
 - riacutizzazione di BPCO, asma acuto grave, polmonite con insufficienza respiratoria,
-  quando lo studio riguarda il supporto respiratorio o l'outcome respiratorio;
-- ventilazione meccanica invasiva, intubazione e gestione delle vie aeree nel paziente
-  critico, weaning, estubazione e supporto post-estubazione;
-- monitoraggio respiratorio, emogasanalisi, scambi gassosi, drive respiratorio, P-SILI;
-- sedazione e analgesia specificamente nel paziente ventilato.
+  quando lo studio riguarda il supporto non invasivo o l'outcome respiratorio;
+- posizione prona da sveglio, monitoraggio respiratorio non invasivo, emogasanalisi,
+  drive respiratorio e P-SILI nel paziente in respiro spontaneo;
+- criteri e indici di fallimento della NIV o dell'HFNC, timing dell'intubazione.
 
-NON è pertinente — e va escluso anche se contiene la parola "respiratorio":
-- studi di pneumologia cronica ambulatoriale (asma stabile, BPCO stabile, OSAS
-  elettiva, fibrosi, riabilitazione respiratoria, cessazione del fumo);
+CATEGORIA "collegata" — ammessa, ma con parsimonia. L'articolo riguarda la
+ventilazione invasiva ED è in continuità diretta con la gestione non invasiva:
+- preossigenazione e intubazione dopo fallimento del supporto non invasivo;
+- estubazione e supporto non invasivo profilattico dopo l'estubazione;
+- confronto diretto fra strategia invasiva e non invasiva.
+
+NON è pertinente e va ESCLUSO, anche se contiene la parola "respiratorio" o
+"ventilazione":
+- gestione della ventilazione invasiva durante la degenza in terapia intensiva:
+  strategie di ventilazione protettiva, PEEP, reclutamento, weaning prolungato,
+  tracheostomia, sedazione e curarizzazione del paziente intubato;
+- ARDS trattata con ventilazione invasiva, quando il supporto non invasivo non è
+  in questione;
+- pneumologia cronica ambulatoriale (asma stabile, BPCO stabile, OSAS elettiva,
+  fibrosi, riabilitazione respiratoria, cessazione del fumo);
 - epidemiologia o prevenzione delle infezioni respiratorie senza dati sul supporto
   ventilatorio;
 - studi in cui la ventilazione compare solo come variabile di aggiustamento o come
   endpoint secondario marginale;
 - case report, case series, lettere, editoriali, commenti, errata.
 
-SOGLIA: nel dubbio, ESCLUDI. E' preferibile un digest di 2 articoli davvero
-sul supporto ventilatorio che uno di 5 in cui 3 c'entrano poco.
+SOGLIA: nel dubbio, ESCLUDI. È preferibile un digest di 2 articoli davvero sulla
+ventilazione non invasiva che uno di 5 in cui 3 riguardano il paziente intubato in
+terapia intensiva. Non usare la categoria "collegata" per fare entrare articoli di
+terapia intensiva che non hanno un legame reale con il supporto non invasivo.
 
 ARTICOLI CANDIDATI:
 {articoli}
@@ -169,10 +248,12 @@ non inventare né modificare PMID. Se nessun articolo è pertinente restituisci
 esattamente: []
 
 [
-  {{"pmid": "12345678", "tema": "HFNC", "perche": "motivo in max 15 parole"}}
+  {{"pmid": "12345678", "tema": "HFNC", "categoria": "non-invasiva", "perche": "motivo in max 15 parole"}},
+  {{"pmid": "23456789", "tema": "intubazione", "categoria": "collegata", "perche": "..."}}
 ]
 
-Ordina dal più rilevante al meno rilevante."""
+Ordina dal più rilevante al meno rilevante, mettendo per primi gli articoli di
+categoria "non-invasiva"."""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STADIO 2 — FILTRO EM (criteri di newsletter-ps)
@@ -222,13 +303,41 @@ Ordina dal più rilevante al meno rilevante."""
 # ═══════════════════════════════════════════════════════════════════════════════
 # SINTESI
 # ═══════════════════════════════════════════════════════════════════════════════
-REGOLE_COMUNI = """Attieniti SOLO ai dati dell'abstract: non aggiungere, non inferire, non inventare.
-NON alterare numeri, dosi, unità di misura, percentuali: riporta cifre e separatore
-decimale esattamente come nell'originale (0.85; p<0.001).
-Traduci il significato clinico, mai parola per parola: "severe"=grave, "evidence"=prove,
-"consistent"=coerente, "rate"=tasso, "compliance"=aderenza, "management"=gestione.
-Mantieni in forma originale le scale validate (GCS, SOFA, NEWS2, CURB-65) e le misure
-statistiche (OR, HR, RR, IC 95%)."""
+REGOLE_COMUNI = """REGOLE DI TRADUZIONE (obbligatorie):
+- ORTOGRAFIA: usa gli accenti italiani corretti (è, à, ì, ò, ù, é). Non sostituirli
+  mai con l'apostrofo: si scrive "qualità", non "qualita'"; "è", non "e'";
+  "più", non "piu'"; "perché", non "perche'".
+- ORTOGRAFIA DI TERMINI RICORRENTI, spesso storpiati: si scrive "preospedaliero"
+  (non "preistospedaliero" né "prestospedaliero"), "intraospedaliero",
+  "extraospedaliero", "endotracheale", "emogasanalisi", "ipercapnico".
+- Traduci il SIGNIFICATO clinico, mai parola per parola. Vietati i calchi dall'inglese.
+- Evita i falsi amici: "severe"=grave (non "severo"); "evidence"=prove/evidenze
+  (non "evidenza"); "eventually"=infine; "actual"=effettivo/reale (non "attuale");
+  "consistent"=coerente/costante (non "consistente"); "to require"=necessitare;
+  "rate"=tasso; "compliance"=aderenza (ma "lung compliance"=compliance polmonare,
+  termine tecnico che resta); "management"=gestione; "care"=assistenza/cure;
+  "mortality"=mortalità; "morbidity"=morbilità.
+- Terminologia respiratoria italiana corrente: "weaning"=svezzamento dal ventilatore,
+  "airway"=vie aeree, "breathing effort"=sforzo respiratorio, "work of breathing"=
+  lavoro respiratorio, "tidal volume"=volume corrente, "driving pressure"=pressione
+  di distensione, "awake prone positioning"=posizione prona da sveglio.
+- Lascia in inglese SOLO i termini realmente in uso in clinica italiana: NIV, CPAP,
+  HFNC, ARDS, PEEP, P/F, shock, outcome, endpoint, follow-up, weaning, setting,
+  cut-off, bias, propensity score; usa "basale" per baseline.
+- Lessico dei trial: "arm"=braccio; "blinded"=in cieco; "open-label"=in aperto;
+  "primary/secondary endpoint"=endpoint primario/secondario; "number needed to
+  treat"=NNT; "confounding"=confondimento.
+- Riporta con precisione le misure statistiche: odds ratio (OR), hazard ratio (HR),
+  rischio relativo (RR), intervallo di confidenza (IC) al 95%, valore di p.
+- NUMERI: riporta cifre e separatore decimale ESATTAMENTE come nell'originale
+  (punto decimale: 0.85; p<0.001). Non alterare dosi, unità di misura, percentuali,
+  né i parametri ventilatori (FiO2, PEEP, cmH2O, L/min).
+- Mantieni in forma originale le scale validate (GCS, SOFA, NEWS2, CURB-65, HACOR,
+  indice ROX).
+- Espandi ogni acronimo alla prima comparsa, poi usa la sigla.
+- Non usare mai "significativo" da solo: specifica "statisticamente significativo"
+  oppure "clinicamente rilevante".
+- Attieniti SOLO ai dati dell'abstract: non aggiungere, non inferire, non inventare."""
 
 SYSTEM_SINTESI_NIV = """Sei un medico di Area Critica e Pronto Soccorso italiano esperto in
 ventilazione non invasiva e supporto respiratorio, e in traduzione medico-scientifica
@@ -242,29 +351,74 @@ scientifica e di traduzione medico-scientifica dall'inglese all'italiano.
 """ + REGOLE_COMUNI
 
 # --- NIV: focus sul supporto ventilatorio -------------------------------------
-PROMPT_SINTESI_MULTI = """Analizza OGNI articolo della lista e produci per ciascuno, in italiano:
-1. SINTESI: 3-4 frasi che rispondano a — domanda clinica, disegno e popolazione,
-   risultato principale (con i numeri chiave), impatto per la gestione
-   dell'insufficienza respiratoria acuta in PS/ICU
-2. RILEVANZA: una sola frase sulla rilevanza pratica per il supporto ventilatorio
-   in Pronto Soccorso
+PROMPT_SINTESI_MULTI = """Analizza OGNI articolo della lista e produci per ciascuno quattro campi:
+
+1. "sintesi" - da 90 a 120 parole, che rispondano nell'ordine a: quesito clinico;
+   disegno dello studio e popolazione, con numerosità; risultato principale con i
+   numeri chiave e la misura di effetto; ricaduta sulla pratica nella gestione dell'insufficienza respiratoria acuta e del supporto ventilatorio non invasivo in PS/Area Critica.
+2. "rilevanza" - UNA sola frase, massimo 30 parole, sulla ricaduta pratica concreta
+   per il supporto respiratorio non invasivo in Pronto Soccorso.
+3. "limite" - UNA sola frase, massimo 25 parole, sul principale limite metodologico:
+   monocentrico, non in cieco, endpoint surrogato, campione ridotto, popolazione
+   selezionata, interruzione precoce, follow-up breve, conflitti di interesse.
+   Per le sintesi di letteratura il limite riguarda il metodo della revisione:
+   narrativa e non sistematica, selezione non riproducibile, eterogeneità degli studi.
+   Solo se l'abstract non consente davvero di identificare alcun limite, scrivi
+   esattamente: "Limiti non desumibili dall'abstract."
+4. "tipo" - UNO SOLO fra questi valori, riportato esattamente così:
+   "cambia-pratica" = lo studio modifica una condotta oggi diffusa
+   "conferma"       = rafforza una pratica già consolidata
+   "controverso"    = risultati discordanti con evidenze o linee guida attuali
+   "esplorativo"    = ipotesi generatrice, dati preliminari, campione insufficiente
+   "revisione"      = sintesi di letteratura senza dati primari originali (review
+                      narrativa, scoping review, revisione sistematica, linea guida)
+
+SE L'ABSTRACT È ASSENTE O PRIVO DI RISULTATI NUMERICI: scrivi nella "sintesi" una
+sola frase che lo dichiari esplicitamente, non inferire nulla dal titolo, usa
+"esplorativo" come tipo.
 
 ARTICOLI:
 {articoli}
 
-Rispondi SOLO in questo formato, ripetuto per ogni articolo, nello stesso ordine
-della lista, senza alcun altro testo prima o dopo:
+FORMATO DI RISPOSTA - restituisci SOLO un array JSON valido, senza testo prima o dopo,
+senza blocchi markdown, con un oggetto per articolo, nello stesso ordine della lista.
+Riporta il "pmid" esattamente come ti è stato fornito.
 
-### PMID: [pmid]
-SINTESI: [testo]
-RILEVANZA: [testo]"""
+[
+  {{
+    "pmid": "12345678",
+    "sintesi": "...",
+    "rilevanza": "...",
+    "limite": "...",
+    "tipo": "cambia-pratica"
+  }}
+]"""
 
-PROMPT_SINTESI = """Analizza questo articolo e produci in italiano:
-1. SINTESI: 3-4 frasi che rispondano a — domanda clinica, disegno e popolazione,
-   risultato principale con i numeri chiave, impatto per la gestione
-   dell'insufficienza respiratoria acuta in PS/ICU
-2. RILEVANZA: una sola frase sulla rilevanza pratica per il supporto ventilatorio
-   in Pronto Soccorso
+PROMPT_SINTESI = """Analizza l'articolo e produci quattro campi:
+
+1. "sintesi" - da 90 a 120 parole, che rispondano nell'ordine a: quesito clinico;
+   disegno dello studio e popolazione, con numerosità; risultato principale con i
+   numeri chiave e la misura di effetto; ricaduta sulla pratica nella gestione dell'insufficienza respiratoria acuta e del supporto ventilatorio non invasivo in PS/Area Critica.
+2. "rilevanza" - UNA sola frase, massimo 30 parole, sulla ricaduta pratica concreta
+   per il supporto respiratorio non invasivo in Pronto Soccorso.
+3. "limite" - UNA sola frase, massimo 25 parole, sul principale limite metodologico:
+   monocentrico, non in cieco, endpoint surrogato, campione ridotto, popolazione
+   selezionata, interruzione precoce, follow-up breve, conflitti di interesse.
+   Per le sintesi di letteratura il limite riguarda il metodo della revisione:
+   narrativa e non sistematica, selezione non riproducibile, eterogeneità degli studi.
+   Solo se l'abstract non consente davvero di identificare alcun limite, scrivi
+   esattamente: "Limiti non desumibili dall'abstract."
+4. "tipo" - UNO SOLO fra questi valori, riportato esattamente così:
+   "cambia-pratica" = lo studio modifica una condotta oggi diffusa
+   "conferma"       = rafforza una pratica già consolidata
+   "controverso"    = risultati discordanti con evidenze o linee guida attuali
+   "esplorativo"    = ipotesi generatrice, dati preliminari, campione insufficiente
+   "revisione"      = sintesi di letteratura senza dati primari originali (review
+                      narrativa, scoping review, revisione sistematica, linea guida)
+
+SE L'ABSTRACT È ASSENTE O PRIVO DI RISULTATI NUMERICI: scrivi nella "sintesi" una
+sola frase che lo dichiari esplicitamente, non inferire nulla dal titolo, usa
+"esplorativo" come tipo.
 
 Articolo:
 PMID: {pmid}
@@ -273,34 +427,88 @@ Autori: {autori}
 Rivista: {rivista} ({data})
 Abstract: {abstract}
 
-Rispondi SOLO in questo formato:
-### PMID: {pmid}
-SINTESI: [testo]
-RILEVANZA: [testo]"""
+FORMATO DI RISPOSTA - restituisci SOLO un array JSON valido con UN solo oggetto,
+senza testo prima o dopo, senza blocchi markdown:
+
+[
+  {{
+    "pmid": "{pmid}",
+    "sintesi": "...",
+    "rilevanza": "...",
+    "limite": "...",
+    "tipo": "conferma"
+  }}
+]"""
 
 # --- EM: focus generale sulla pratica in PS ------------------------------------
-PROMPT_SINTESI_MULTI_EM = """Analizza OGNI articolo della lista e produci per ciascuno, in italiano:
-1. SINTESI: 3-4 frasi che rispondano a — quesito clinico, disegno dello studio e
-   popolazione con numerosità, risultato principale con i numeri chiave e la misura
-   di effetto, ricaduta sulla pratica in PS/Area Critica
-2. RILEVANZA: una sola frase, massimo 30 parole, sulla ricaduta pratica concreta
-   in Pronto Soccorso
+PROMPT_SINTESI_MULTI_EM = """Analizza OGNI articolo della lista e produci per ciascuno quattro campi:
+
+1. "sintesi" - da 90 a 120 parole, che rispondano nell'ordine a: quesito clinico;
+   disegno dello studio e popolazione, con numerosità; risultato principale con i
+   numeri chiave e la misura di effetto; ricaduta sulla pratica in Pronto Soccorso e Area Critica.
+2. "rilevanza" - UNA sola frase, massimo 30 parole, sulla ricaduta pratica concreta
+   per la pratica in Pronto Soccorso.
+3. "limite" - UNA sola frase, massimo 25 parole, sul principale limite metodologico:
+   monocentrico, non in cieco, endpoint surrogato, campione ridotto, popolazione
+   selezionata, interruzione precoce, follow-up breve, conflitti di interesse.
+   Per le sintesi di letteratura il limite riguarda il metodo della revisione:
+   narrativa e non sistematica, selezione non riproducibile, eterogeneità degli studi.
+   Solo se l'abstract non consente davvero di identificare alcun limite, scrivi
+   esattamente: "Limiti non desumibili dall'abstract."
+4. "tipo" - UNO SOLO fra questi valori, riportato esattamente così:
+   "cambia-pratica" = lo studio modifica una condotta oggi diffusa
+   "conferma"       = rafforza una pratica già consolidata
+   "controverso"    = risultati discordanti con evidenze o linee guida attuali
+   "esplorativo"    = ipotesi generatrice, dati preliminari, campione insufficiente
+   "revisione"      = sintesi di letteratura senza dati primari originali (review
+                      narrativa, scoping review, revisione sistematica, linea guida)
+
+SE L'ABSTRACT È ASSENTE O PRIVO DI RISULTATI NUMERICI: scrivi nella "sintesi" una
+sola frase che lo dichiari esplicitamente, non inferire nulla dal titolo, usa
+"esplorativo" come tipo.
 
 ARTICOLI:
 {articoli}
 
-Rispondi SOLO in questo formato, ripetuto per ogni articolo, nello stesso ordine
-della lista, senza alcun altro testo prima o dopo:
+FORMATO DI RISPOSTA - restituisci SOLO un array JSON valido, senza testo prima o dopo,
+senza blocchi markdown, con un oggetto per articolo, nello stesso ordine della lista.
+Riporta il "pmid" esattamente come ti è stato fornito.
 
-### PMID: [pmid]
-SINTESI: [testo]
-RILEVANZA: [testo]"""
+[
+  {{
+    "pmid": "12345678",
+    "sintesi": "...",
+    "rilevanza": "...",
+    "limite": "...",
+    "tipo": "cambia-pratica"
+  }}
+]"""
 
-PROMPT_SINTESI_EM = """Analizza questo articolo e produci in italiano:
-1. SINTESI: 3-4 frasi che rispondano a — quesito clinico, disegno e popolazione con
-   numerosità, risultato principale con i numeri chiave e la misura di effetto,
-   ricaduta sulla pratica in PS/Area Critica
-2. RILEVANZA: una sola frase, massimo 30 parole, sulla ricaduta pratica concreta
+PROMPT_SINTESI_EM = """Analizza l'articolo e produci quattro campi:
+
+1. "sintesi" - da 90 a 120 parole, che rispondano nell'ordine a: quesito clinico;
+   disegno dello studio e popolazione, con numerosità; risultato principale con i
+   numeri chiave e la misura di effetto; ricaduta sulla pratica in Pronto Soccorso e Area Critica.
+2. "rilevanza" - UNA sola frase, massimo 30 parole, sulla ricaduta pratica concreta
+   per la pratica in Pronto Soccorso.
+3. "limite" - UNA sola frase, massimo 25 parole, sul principale limite metodologico:
+   monocentrico, non in cieco, endpoint surrogato, campione ridotto, popolazione
+   selezionata, interruzione precoce, follow-up breve, conflitti di interesse.
+   Per le sintesi di letteratura il limite riguarda il metodo della revisione:
+   narrativa e non sistematica, selezione non riproducibile, eterogeneità degli studi.
+   Solo se l'abstract non consente davvero di identificare alcun limite, scrivi
+   esattamente: "Limiti non desumibili dall'abstract."
+4. "tipo" - UNO SOLO fra questi valori, riportato esattamente così:
+   "cambia-pratica" = lo studio modifica una condotta oggi diffusa
+   "conferma"       = rafforza una pratica già consolidata
+   "controverso"    = risultati discordanti con evidenze o linee guida attuali
+   "esplorativo"    = ipotesi generatrice, dati preliminari, campione insufficiente
+   "revisione"      = sintesi di letteratura senza dati primari originali (review
+                      narrativa, scoping review, revisione sistematica, linea guida)
+
+SE L'ABSTRACT È ASSENTE O PRIVO DI RISULTATI NUMERICI: scrivi nella "sintesi" una
+sola frase che lo dichiari esplicitamente, non inferire nulla dal titolo, usa
+"esplorativo" come tipo.
 
 Articolo:
 PMID: {pmid}
@@ -309,17 +517,27 @@ Autori: {autori}
 Rivista: {rivista} ({data})
 Abstract: {abstract}
 
-Rispondi SOLO in questo formato:
-### PMID: {pmid}
-SINTESI: [testo]
-RILEVANZA: [testo]"""
+FORMATO DI RISPOSTA - restituisci SOLO un array JSON valido con UN solo oggetto,
+senza testo prima o dopo, senza blocchi markdown:
+
+[
+  {{
+    "pmid": "{pmid}",
+    "sintesi": "...",
+    "rilevanza": "...",
+    "limite": "...",
+    "tipo": "conferma"
+  }}
+]"""
 
 
 def valida_config():
     mancanti = []
-    if not ANTHROPIC_API_KEY:  mancanti.append("ANTHROPIC_API_KEY")
-    if not GMAIL_USER:         mancanti.append("GMAIL_USER")
-    if not GMAIL_APP_PASSWORD: mancanti.append("GMAIL_APP_PASSWORD")
+    if not ANTHROPIC_API_KEY: mancanti.append("ANTHROPIC_API_KEY")
+    # In prova a vuoto non si invia nulla: le credenziali SMTP non servono.
+    if not DRY_RUN:
+        if not GMAIL_USER:         mancanti.append("GMAIL_USER")
+        if not GMAIL_APP_PASSWORD: mancanti.append("GMAIL_APP_PASSWORD")
     if mancanti:
         raise RuntimeError(
             f"Variabili d'ambiente mancanti: {', '.join(mancanti)}.\n"
