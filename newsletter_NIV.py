@@ -114,8 +114,9 @@ def fetch_url(url, timeout=20):
 NS = {"dc": "http://purl.org/dc/elements/1.1/"}
 
 
-def url_rss_pubmed(issn):
-    return f"https://pubmed.ncbi.nlm.nih.gov/rss/journals/{issn}/?limit=20&utm_campaign=journals"
+def url_rss_pubmed(issn, limit=None):
+    n = limit or 20
+    return f"https://pubmed.ncbi.nlm.nih.gov/rss/journals/{issn}/?limit={n}&utm_campaign=journals"
 
 
 def parse_pubdate(s):
@@ -167,7 +168,7 @@ def estrai_autori(item):
 
 
 def fetch_feed(rivista):
-    url = url_rss_pubmed(rivista["issn"])
+    url = url_rss_pubmed(rivista["issn"], rivista.get("limit"))
     try:
         raw = fetch_url(url)
         root = ET.fromstring(raw)
@@ -200,8 +201,14 @@ def fetch_feed(rivista):
             "url":        link or f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
             "origine":    "",
         })
-    log.info(f"  {rivista['nlmta']}: {len(articoli)} articoli"
-             + (f" ({scartati} scartati per tipo)" if scartati else ""))
+    if not articoli and not scartati:
+        # Causa quasi sempre un ISSN errato: PubMed risponde 200 con un feed vuoto,
+        # quindi senza questo controllo la rivista sparirebbe in silenzio.
+        log.error(f"  {rivista['nlmta']}: FEED VUOTO - verificare l'ISSN "
+                  f"{rivista['issn']} (per le riviste solo online provare l'eISSN)")
+    else:
+        log.info(f"  {rivista['nlmta']}: {len(articoli)} articoli"
+                 + (f" ({scartati} scartati per tipo)" if scartati else ""))
     return articoli
 
 
@@ -499,6 +506,14 @@ def filtra_niv(candidati, n):
     pool = _limita_candidati(candidati)
     prompt = cfg.PROMPT_FILTRO_NIV.format(n=n, articoli=_blocchi_prompt(pool))
     log.info(f"Filtro NIV stretto su {len(pool)} candidati -> max {n}")
+    if cfg.DRY_RUN:
+        # Senza questo elenco non e' possibile capire se un digest senza articoli
+        # NIV dipenda da una settimana povera o da un filtro troppo severo.
+        log.info("--- CANDIDATI SOTTOPOSTI AL FILTRO NIV ---")
+        for a in pool:
+            tipi = ", ".join(a.get("pubtypes") or []) or "tipo n/d"
+            log.info(f"    {a['pmid']} [{a['rivista']}] ({tipi}) {a['titolo'][:100]}")
+        log.info("--- FINE CANDIDATI ---")
     try:
         selezionati, _ = _filtro_json(
             pool, prompt, cfg.SYSTEM_FILTRO_NIV, n, etichetta="NIV",
@@ -1053,8 +1068,11 @@ def main():
         log.info("--- SELEZIONE FINALE ---")
         for k, a in enumerate(selezionati, 1):
             tipi = ", ".join(a.get("pubtypes") or []) or "tipo n/d"
+            # La categoria esiste solo per gli articoli del filtro NIV: sui
+            # sostitutivi di medicina d'urgenza non ha significato.
+            cat = f"/{a['categoria']}" if a.get("origine") == "niv" and a.get("categoria") else ""
             log.info(f"  {k:02d}. [{a['pmid']}] {a['rivista']} "
-                     f"({a.get('origine', '?')}/{a.get('categoria', '-')}) - {tipi}")
+                     f"({a.get('origine', '?')}{cat}) - {tipi}")
             log.info(f"      {a['titolo'][:120]}")
             log.info(f"      badge: {a.get('tipo') or 'nessuno'}")
             log.info(f"      rilevanza: {(a.get('rilevanza') or '')[:160]}")

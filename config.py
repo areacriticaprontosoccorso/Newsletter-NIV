@@ -47,11 +47,29 @@ RIVISTE = [
     {"nome": "Annals of Intensive Care",        "nlmta": "Ann Intensive Care", "issn": "2110-5820"},
 ]
 
+# Riviste del nucleo tematico: passano dal filtro NIV stretto.
+# NB: AJRCCM, ERJ e Thorax pubblicano molta pneumologia cronica, che il filtro
+# scarta correttamente ma che lascia poco materiale sul supporto non invasivo in
+# acuto. Le riviste di area critica respiratoria qui sotto servono a colmare
+# quel vuoto. "limit" alza la finestra RSS sulle riviste ad alto volume.
 RIVISTE_NIV = [
-    {"nome": "American Journal of Respiratory and Critical Care Medicine", "nlmta": "Am J Respir Crit Care Med", "issn": "1073-449X"},
-    {"nome": "European Respiratory Journal",                              "nlmta": "Eur Respir J",              "issn": "0903-1936"},
-    {"nome": "Thorax",                                                    "nlmta": "Thorax",                    "issn": "0040-6376"},
-    {"nome": "Respiratory Care",                                          "nlmta": "Respir Care",               "issn": "0020-1324"},
+    # ─── Respiratorie generali ────────────────────────────────────────────────
+    {"nome": "Am J Respiratory and Critical Care Medicine", "nlmta": "Am J Respir Crit Care Med", "issn": "1073-449X", "limit": 50},
+    {"nome": "European Respiratory Journal",                "nlmta": "Eur Respir J",              "issn": "0903-1936", "limit": 50},
+    {"nome": "Thorax",                                      "nlmta": "Thorax",                    "issn": "0040-6376"},
+    # ─── Area critica respiratoria e ventilazione ─────────────────────────────
+    {"nome": "Respiratory Care",                            "nlmta": "Respir Care",               "issn": "0020-1324"},
+    {"nome": "Annals of the American Thoracic Society",     "nlmta": "Ann Am Thorac Soc",         "issn": "2329-6933", "limit": 50},
+    {"nome": "The Lancet Respiratory Medicine",             "nlmta": "Lancet Respir Med",         "issn": "2213-2600"},
+    {"nome": "Journal of Intensive Care",                   "nlmta": "J Intensive Care",          "issn": "2052-0492"},
+    {"nome": "Critical Care Explorations",                  "nlmta": "Crit Care Explor",          "issn": "2639-8028"},
+    {"nome": "Respirology",                                 "nlmta": "Respirology",               "issn": "1323-7799"},
+    {"nome": "ERJ Open Research",                           "nlmta": "ERJ Open Res",              "issn": "2312-0541"},
+    {"nome": "BMJ Open Respiratory Research",               "nlmta": "BMJ Open Respir Res",       "issn": "2052-4439"},
+    # Vie aeree e preossigenazione: qui escono spesso i lavori su HFNC e NIV
+    # prima dell'intubazione.
+    {"nome": "British Journal of Anaesthesia",              "nlmta": "Br J Anaesth",              "issn": "0007-0912"},
+    {"nome": "Anaesthesia",                                 "nlmta": "Anaesthesia",               "issn": "0003-2409"},
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
