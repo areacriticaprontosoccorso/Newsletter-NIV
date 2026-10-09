@@ -769,7 +769,7 @@ def _prompt_sintesi(origine):
     return cfg.PROMPT_SINTESI_MULTI, cfg.PROMPT_SINTESI, cfg.SYSTEM_SINTESI_NIV
 
 
-def sintetizza(art):
+def sintetizza(art, correzioni=None):
     """Sintesi di un singolo articolo (fallback)."""
     _, prompt_singolo, system = _prompt_sintesi(art.get("origine"))
     prompt = prompt_singolo.format(
@@ -781,6 +781,13 @@ def sintetizza(art):
         abstract=(art["abstract"][:cfg.ABSTRACT_MAX_SINTESI]
                   if art["abstract"] else "(non disponibile)"),
     )
+    if correzioni:
+        prompt += '\nLa sintesi precedente non ha superato la verifica. Rigenerala ' \
+                  'da zero usando SOLO l’abstract, risolvendo questi problemi senza ' \
+                  'inventare dati. Mantieni lo schema JSON e la lunghezza richiesta.\n' \
+                  + json.dumps(correzioni, ensure_ascii=False)
+        for campo in ('sintesi_it', 'rilevanza', 'limite', 'tipo'):
+            art[campo] = ''
     try:
         r = chiama_claude(prompt, max_tokens=cfg.MAX_TOKENS_SINTESI_SINGOLA,
                           system=system)
@@ -1180,6 +1187,14 @@ def _main():
     approvati = []
     for art in selezionati:
         verifica = controlla_sintesi(art, chiama_claude)
+        if (not verifica['approvato'] and art.get('bibliografia_verificata') and
+                art.get('sintesi_it') and verifica['verifica_ai'] in ('pass', 'fail')):
+            precedente = verifica
+            log.warning('PMID %s: un tentativo di correzione della sintesi', art['pmid'])
+            sintetizza(art, correzioni={'errori': precedente['errori'],
+                                      'sintesi_precedente': art['sintesi_it']})
+            verifica = controlla_sintesi(art, chiama_claude)
+            verifica['tentativo_precedente'] = precedente
         verifica['fonti'] = art.get('fonti', [])
         verifica['rivista'] = art.get('nlmta', '')
         verifica['bibliografia_differenze_corrette'] = art.get('bibliografia_differenze_corrette', [])
