@@ -27,8 +27,11 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 
 import config as cfg
+from quality import controlla_sintesi, salva_report
 
-TUTTE_RIVISTE = cfg.RIVISTE_NIV + cfg.RIVISTE
+TUTTE_RIVISTE = [r for r in cfg.RIVISTE_NIV + cfg.RIVISTE
+                if r.get("attiva", True) and r.get("fase", 0) <= cfg.FASE_RIVISTE]
+QUALITA = {"raccolte": [], "sintesi": []}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -173,6 +176,7 @@ def fetch_feed(rivista):
         root = ET.fromstring(fetch_url(url))
     except Exception as e:
         log.error(f"  {rivista['nlmta']}: errore RSS {e}")
+        QUALITA.setdefault("feed", []).append({"rivista": rivista['nlmta'], "stato": "errore"})
         return []
 
     # Un feed senza <item> arriva come HTTP 200 con XML valido: fetch_url non
@@ -213,6 +217,7 @@ def fetch_feed(rivista):
             "abstract":   estrai_abstract(desc),
             "url":        link or f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
             "origine":    "",
+            "fonti":      ["rss"],
         })
     if not articoli and not scartati:
         # Due cause possibili, e il messaggio non deve suggerirne una sola:
@@ -228,7 +233,64 @@ def fetch_feed(rivista):
     else:
         log.info(f"  {rivista['nlmta']}: {len(articoli)} articoli"
                  + (f" ({scartati} scartati per tipo)" if scartati else ""))
+    QUALITA.setdefault("feed", []).append({"rivista": rivista['nlmta'],
+        "stato": "ok" if root.findall('.//item') else "vuoto", "articoli": len(articoli)})
     return articoli
+
+
+def cerca_pubmed(giorni):
+    """ESearch per data di ingresso in PubMed; indipendente dalla data RSS.
+
+    Include lavori appena indicizzati con data di pubblicazione precedente.
+    Paginazione limitata e segnalazione esplicita di risultati incompleti.
+    """
+    pmids, totale = [], 0
+    stato = {"giorni": giorni, "query": cfg.PUBMED_QUERY, "stato": "ok"}
+    try:
+        while True:
+            campi = {"db": "pubmed", "term": cfg.PUBMED_QUERY, "retmode": "json",
+                      "reldate": giorni, "datetype": "edat", "sort": "pub date",
+                      "retstart": len(pmids),
+                      "retmax": min(cfg.PUBMED_PAGE_SIZE, cfg.PUBMED_MAX_RECORDS - len(pmids)),
+                      "tool": cfg.NCBI_TOOL}
+            if cfg.NCBI_EMAIL:
+                campi['email'] = cfg.NCBI_EMAIL
+            risposta = json.loads(fetch_url(cfg.ESEARCH_URL + '?' + urllib.parse.urlencode(campi)))
+            dati = risposta['esearchresult']
+            if dati.get('error') or risposta.get('error'):
+                raise ValueError('ESearch ha restituito un errore')
+            totale = int(dati['count'])
+            pagina = dati['idlist']
+            if not isinstance(pagina, list) or any(not str(p).isdigit() for p in pagina):
+                raise ValueError('PMID non validi')
+            if not pagina:
+                if len(pmids) < min(totale, cfg.PUBMED_MAX_RECORDS):
+                    raise ValueError('Paginazione incompleta')
+                break
+            pmids.extend(str(p) for p in pagina)
+            time.sleep(0.4)
+            if len(pmids) >= min(totale, cfg.PUBMED_MAX_RECORDS):
+                break
+    except Exception as exc:
+        stato.update(stato='errore', errore=str(exc))
+        log.error('Ricerca tematica PubMed fallita: %s', exc)
+    stato.update(totale=totale, recuperati=len(pmids), troncata=totale > cfg.PUBMED_MAX_RECORDS)
+    QUALITA.setdefault('pubmed', []).append(stato)
+    return [{"pmid": p, "titolo": "", "autori": "", "rivista": "", "nlmta": "",
+             "data": "", "pubdate_dt": None, "doi": "", "abstract": "",
+             "url": f"https://pubmed.ncbi.nlm.nih.gov/{p}/", "origine": "",
+             "fonti": ["pubmed_tematica"]} for p in dict.fromkeys(pmids)]
+
+
+def deduplica(articoli):
+    unici = {}
+    for art in articoli:
+        if art['pmid'] not in unici:
+            unici[art['pmid']] = art
+        else:
+            vecchio = unici[art['pmid']]
+            vecchio['fonti'] = sorted(set(vecchio.get('fonti', [])) | set(art.get('fonti', [])))
+    return list(unici.values())
 
 
 def _parse_abstract(art_el):
@@ -269,14 +331,45 @@ def _efetch_lotto(pmids):
         dettagli[pmid_el.text.strip()] = {
             "abstract": _parse_abstract(art_el),
             "pubtypes": [t for t in tipi if t],
+            "titolo": ''.join(art_el.find('ArticleTitle').itertext()).strip().rstrip('.')
+                      if art_el.find('ArticleTitle') is not None else '',
+            "rivista": art_el.findtext('./Journal/Title') or '',
+            "nlmta": art.findtext('./MedlineCitation/MedlineJournalInfo/MedlineTA') or '',
+            "doi": next((el.text.strip() for el in art.findall('./PubmedData/ArticleIdList/ArticleId')
+                         if el.get('IdType') == 'doi' and el.text), ''),
+            "autori": _autori_efetch(art_el),
+            **_data_efetch(art, art_el),
         }
     return dettagli
 
 
+def _autori_efetch(art_el):
+    nomi = [(a.findtext('CollectiveName') or
+             ' '.join(filter(None, [a.findtext('LastName'), a.findtext('Initials')])) )
+            for a in art_el.findall('./AuthorList/Author')]
+    nomi = [n for n in nomi if n]
+    return ', '.join(nomi[:3]) + (' et al.' if len(nomi) > 3 else '')
+
+
+def _data_efetch(art, art_el):
+    el = art_el.find('./Journal/JournalIssue/PubDate')
+    data = ' '.join(t.strip() for t in el.itertext() if t.strip()) if el is not None else ''
+    # La data di ingresso esatta serve per ordinare i nuovi record tematici.
+    ingresso = art.find('./PubmedData/History/PubMedPubDate[@PubStatus="entrez"]')
+    dt = None
+    if ingresso is not None:
+        try:
+            dt = datetime(*(int(ingresso.findtext(k)) for k in ('Year', 'Month', 'Day')),
+                          tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            pass
+    return {'data': data, 'pubdate_dt': dt}
+
+
 def arricchisci_con_efetch(articoli):
-    """Sostituisce l'abstract del feed con quello vero e aggiunge i PublicationType.
-    In caso di errore degrada in silenzio: gli articoli restano com'erano e il
-    filtro sui titoli fa da rete di sicurezza."""
+    """Carica abstract, bibliografia e PublicationType canonici.
+    Se EFetch fallisce i dati RSS restano disponibili per la selezione, ma
+    l'articolo non può superare il controllo bibliografico prima dell'invio."""
     pmids = [a["pmid"] for a in articoli if a.get("pmid")]
     if not pmids:
         return articoli
@@ -304,12 +397,18 @@ def arricchisci_con_efetch(articoli):
         d = dettagli.get(a["pmid"])
         if not d:
             continue
-        a["pubtypes"] = d["pubtypes"]
-        # Si sostituisce solo se efetch porta più testo: mai un peggioramento.
-        if len(d["abstract"]) > len(a.get("abstract") or ""):
-            if len(a.get("abstract") or "") < cfg.ABSTRACT_MIN_CHARS <= len(d["abstract"]):
-                recuperati += 1
-            a["abstract"] = d["abstract"]
+        differenze = [k for k in ('titolo', 'doi', 'nlmta')
+                      if a.get(k) and str(a[k]).casefold().rstrip('.') != str(d.get(k, '')).casefold().rstrip('.')]
+        if len(a.get('abstract') or '') < cfg.ABSTRACT_MIN_CHARS <= len(d['abstract']):
+            recuperati += 1
+        # Il record canonico prevale sempre, anche con abstract più corto/assente.
+        precedente_dt = a.get('pubdate_dt')
+        a.update(d)
+        if 'rss' in a.get('fonti', []) and precedente_dt:
+            a['pubdate_dt'] = precedente_dt
+        a['url'] = f"https://pubmed.ncbi.nlm.nih.gov/{a['pmid']}/"
+        a['bibliografia_verificata'] = bool(d.get('titolo') and d.get('nlmta'))
+        a['bibliografia_differenze_corrette'] = differenze
 
     log.info(f"efetch: dettagli per {len(dettagli)}/{len(pmids)} PMID, "
              f"{recuperati} articoli recuperati con abstract prima assente")
@@ -349,8 +448,10 @@ def raccogli_candidati(giorni=None):
         log.info(f"    -> {len(recenti)} ultimi {giorni}g")
         tutti.extend(recenti)
         time.sleep(0.3)
-    seen = set()
-    unici = [a for a in tutti if not (a["pmid"] in seen or seen.add(a["pmid"]))]
+    n_rss = len(tutti)
+    tematici = cerca_pubmed(giorni) if cfg.PUBMED_TEMATICA else []
+    tutti.extend(tematici)
+    unici = deduplica(tutti)
 
     # Abstract veri e PublicationType da E-utilities, prima di filtrare.
     unici = arricchisci_con_efetch(unici)
@@ -378,6 +479,13 @@ def raccogli_candidati(giorni=None):
     log.info(f"Unici {len(unici)} -> scartati {scartati_pubtype} per pubtype, "
              f"{scartati_titolo} per titolo, {scartati_abstract} per abstract "
              f"-> {len(candidati)} candidati")
+    QUALITA['raccolte'].append({'giorni': giorni, 'rss_recenti': n_rss,
+        'tematici': len(tematici), 'duplicati': len(tutti) - len(unici),
+        'unici': len(unici), 'candidati': len(candidati),
+        'scartati_pubtype': scartati_pubtype, 'scartati_titolo': scartati_titolo,
+        'scartati_abstract': scartati_abstract,
+        'bibliografia_non_verificata': sum(not a.get('bibliografia_verificata') for a in unici),
+        'riviste': {r['nlmta']: sum(a['nlmta'] == r['nlmta'] for a in candidati) for r in TUTTE_RIVISTE}})
     return candidati
 
 
@@ -678,7 +786,7 @@ def sintetizza(art):
                           system=system)
         voci = _estrai_json_array(r)
         esito = _voce_sintesi(voci[0]) if voci else None
-        if not esito or not esito[1]["sintesi_it"]:
+        if not esito or esito[0] != art['pmid'] or not esito[1]["sintesi_it"]:
             raise ValueError("risposta priva di sintesi utilizzabile")
         # Si usa sempre il PMID dell'articolo, non quello riportato dal modello.
         art.update(esito[1])
@@ -908,7 +1016,7 @@ def build_html(articoli, stato):
       <tr>
         <td style="background:{cfg.COLOR_DARK};padding:22px 32px;">
           <p style="font-family:monospace;font-size:10px;color:#556;margin:0;line-height:1.8;">
-            Generato con {esc(cfg.ANTHROPIC_MODEL)} (Anthropic) a cura di Francesco Panero &middot; Fonte dati: PubMed RSS feeds<br/>
+            Generato con {esc(cfg.ANTHROPIC_MODEL)} (Anthropic) a cura di Francesco Panero &middot; Fonte dati: PubMed RSS e ricerca tematica<br/>
             Le sintesi sono prodotte da AI e devono essere verificate prima dell'applicazione clinica.<br/>
             <a href="{cfg.NEWSLETTER_PAGE_URL}" style="color:{cfg.COLOR_ACCENT};">Condividi: invita un collega</a> · <a href="{cfg.NEWSLETTER_PAGE_URL}#unsub" style="color:#999;">Disiscriviti</a>
           </p>
@@ -1041,7 +1149,7 @@ def invia_telegram(articoli, stato):
     return successi == totale
 
 
-def main():
+def _main():
     cfg.valida_config()
     wl = numero_settimana()
     log.info(f"=== NIV Weekly Digest - settimana {wl['settimana']}/{wl['anno']} ===")
@@ -1068,6 +1176,19 @@ def main():
         return False
 
     selezionati = sintetizza_articoli(selezionati)
+    n_selezionati = len(selezionati)
+    approvati = []
+    for art in selezionati:
+        verifica = controlla_sintesi(art, chiama_claude)
+        verifica['fonti'] = art.get('fonti', [])
+        verifica['rivista'] = art.get('nlmta', '')
+        verifica['bibliografia_differenze_corrette'] = art.get('bibliografia_differenze_corrette', [])
+        QUALITA['sintesi'].append(verifica)
+        if verifica['approvato']:
+            approvati.append(art)
+        else:
+            log.error('PMID %s escluso dai controlli: %s', art['pmid'], verifica['errori'])
+    selezionati = approvati
 
     # Una newsletter senza sintesi in italiano non va spedita: e' il sintomo di
     # chiamate API fallite, e un digest svuotato erode la fiducia dei lettori
@@ -1075,12 +1196,14 @@ def main():
     con_sintesi = [a for a in selezionati if a.get("sintesi_it")]
     if len(con_sintesi) < cfg.MINIMO_ARTICOLI:
         log.error(
-            f"Solo {len(con_sintesi)}/{len(selezionati)} articoli hanno una sintesi "
+            f"Solo {len(con_sintesi)}/{n_selezionati} articoli hanno una sintesi verificata "
             f"(minimo {cfg.MINIMO_ARTICOLI}): INVIO ANNULLATO. "
-            "Controllare gli errori API qui sopra."
+            "Controllare il report di qualità e gli errori API."
         )
         return False
     selezionati = con_sintesi
+    stato['n_niv'] = sum(a.get('origine') == 'niv' for a in selezionati)
+    stato['n_em'] = len(selezionati) - stato['n_niv']
 
     html_body = build_html(selezionati, stato)
 
@@ -1115,5 +1238,20 @@ def main():
     return ok_email
 
 
+def main():
+    QUALITA.clear()
+    QUALITA.update(raccolte=[], sintesi=[], esito='in_corso',
+                   data=datetime.now(timezone.utc).isoformat(), fase_riviste=cfg.FASE_RIVISTE)
+    try:
+        ok = _main()
+        QUALITA['esito'] = 'ok' if ok else 'fallito_o_bloccato'
+        return ok
+    except Exception as exc:
+        QUALITA.update(esito='errore', errore=str(exc))
+        raise
+    finally:
+        salva_report(QUALITA, cfg.QUALITY_REPORT_FILE, cfg.QUALITY_REPORT_MD)
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(0 if main() else 1)

@@ -53,6 +53,10 @@ RIVISTE = [
 # acuto. Le riviste di area critica respiratoria qui sotto servono a colmare
 # quel vuoto. "limit" alza la finestra RSS sulle riviste ad alto volume.
 RIVISTE_NIV = [
+    # Prima espansione: attive subito; le successive potranno usare fase=2,3...
+    {"nome": "Journal of Critical Care", "nlmta": "J Crit Care", "issn": "0883-9441", "fase": 1, "limit": 50},
+    {"nome": "Respiratory Medicine", "nlmta": "Respir Med", "issn": "0954-6111", "fase": 1, "limit": 50},
+    {"nome": "European Respiratory Review", "nlmta": "Eur Respir Rev", "issn": "0905-9180", "fase": 1, "limit": 50},
     # ─── Respiratorie generali ────────────────────────────────────────────────
     {"nome": "Am J Respiratory and Critical Care Medicine", "nlmta": "Am J Respir Crit Care Med", "issn": "1073-449X", "limit": 50},
     {"nome": "European Respiratory Journal",                "nlmta": "Eur Respir J",              "issn": "0903-1936", "limit": 50},
@@ -78,6 +82,26 @@ RIVISTE_NIV = [
 ARTICOLI_FINALI       = 5    # posizioni totali nel digest
 GIORNI_RICERCA        = 7
 GIORNI_RICERCA_ESTESO = 14   # fallback se la settimana è povera
+FASE_RIVISTE = int(os.environ.get("FASE_RIVISTE", "1"))
+PUBMED_TEMATICA = True
+# Ricerca su TUTTE le riviste PubMed: scopre lavori fuori dal nucleo RSS.
+PUBMED_QUERY = ('("Noninvasive Ventilation"[MeSH Terms] OR '
+                '"Continuous Positive Airway Pressure"[MeSH Terms] OR '
+                '"noninvasive ventilation"[Title/Abstract] OR '
+                '"non-invasive ventilation"[Title/Abstract] OR '
+                '"high flow nasal"[Title/Abstract] OR '
+                '"high-flow nasal"[Title/Abstract] OR HFNC[Title/Abstract] OR '
+                'CPAP[Title/Abstract] OR preoxygenation[Title/Abstract]) AND '
+                '("acute respiratory failure"[Title/Abstract] OR '
+                '"respiratory insufficiency"[MeSH Terms] OR '
+                'emergency[Title/Abstract] OR "critical care"[Title/Abstract] OR '
+                'extubation[Title/Abstract] OR intubation[Title/Abstract] OR '
+                '"pulmonary edema"[Title/Abstract] OR exacerbation[Title/Abstract])')
+ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+PUBMED_MAX_RECORDS = 500  # superamento segnalato nel report, mai nascosto
+PUBMED_PAGE_SIZE = 100
+QUALITY_REPORT_FILE = "quality_report.json"
+QUALITY_REPORT_MD = "quality_report.md"
 MINIMO_ARTICOLI       = 3    # sotto questa soglia si riempie per data
 MAX_PER_TEMA          = 2    # max articoli sullo stesso tema clinico (parte EM)
 # La newsletter è sulla ventilazione NON invasiva: la ventilazione invasiva entra
