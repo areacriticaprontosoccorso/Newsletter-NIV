@@ -1,11 +1,35 @@
 """Controlli conservativi; non costituiscono una validazione clinica del testo."""
 import json
 import re
+import unicodedata
 from decimal import Decimal
 
 
 _WORDS = dict(zip('zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(), range(20)))
 _WORDS.update(dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(), range(20, 100, 10))))
+
+
+def _testo_evidenza(testo):
+    """Solo normalizzazione tipografica: niente parafrasi o fuzzy matching."""
+    testo = unicodedata.normalize('NFC', testo).translate(str.maketrans(
+        {'’': "'", '‘': "'", '“': '"', '”': '"', '−': '-', '–': '-'}))
+    testo = re.sub(r'\s+', ' ', testo).strip()
+    return re.sub(r'\s*([=<>≤≥%,;:()\[\]])\s*', r'\1', testo)
+
+
+def evidenza_presente(estratto, fonte):
+    return (isinstance(estratto, str) and bool(estratto.strip()) and
+            _testo_evidenza(estratto) in _testo_evidenza(fonte))
+
+
+def _numero_risposta(valore):
+    if isinstance(valore, bool) or not isinstance(valore, (str, int, float)):
+        return None
+    testo = str(valore).strip()
+    if not re.fullmatch(r'[-+]?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][-+]?\d+)?\s*%?', testo):
+        return None
+    valori = numeri(testo)
+    return next(iter(valori)) if len(valori) == 1 else None
 
 
 def _normalizza_numeri(testo):
@@ -69,12 +93,17 @@ testo (es. "reduced by 3 points" può sostenere variazione -3), numeri scritti i
 lettere o conteggi strutturali deducibili senza inferenze cliniche. Non accettare
 numeri inventati, arrotondamenti arbitrari, segni/percentuali invertiti.
 Per ciascun valore riconciliato restituisci numero, motivo ed evidenza letterale.
+Riconcilia SOLO i valori elencati in "numeri_da_verificare": se la lista è vuota
+restituisci "numeri_riconciliati": []. NON elencare valori già presenti o
+normalizzati nell'abstract. Copia il numero esattamente dalla lista richiesta.
+Ogni evidenza deve essere un estratto continuo copiato dall'abstract, senza
+traduzione, parafrasi, ellissi o conversioni numeriche. Usa solo i motivi
+"equivalente" o "strutturale".
 Ogni numero non riconciliabile deve essere elencato negli errori.
 Se non puoi decidere usa "incerto". Non riscrivere o correggere il testo.
 Restituisci SOLO un oggetto JSON: {"pmid":"...", "esito":"pass|fail|incerto",
 "errori":["..."], "avvisi":["..."],
-"numeri_riconciliati":[{"numero":"-3", "motivo":"equivalente|strutturale",
-"evidenza":"estratto letterale dell'abstract"}],
+"numeri_riconciliati":[],
 "evidenze":["estratto letterale dell'abstract", "..."]}.
 Per pass richiedi almeno un estratto a supporto dei risultati della sintesi.
 INPUT:\n''' + json.dumps({'pmid': art['pmid'], 'abstract': fonte,
@@ -83,7 +112,9 @@ INPUT:\n''' + json.dumps({'pmid': art['pmid'], 'abstract': fonte,
             testo = chiama(prompt, max_tokens=1200,
                            system='Sei un revisore bibliografico rigoroso. Verifica senza inferire.')
             testo = re.sub(r'^```(?:json)?\s*|\s*```$', '', testo.strip())
+            risultato['risposta_revisore_testo'] = testo
             verifica = json.loads(testo)
+            risultato['risposta_revisore'] = verifica
             esito = verifica.get('esito')
             evidenze = verifica.get('evidenze')
             problemi = verifica.get('errori')
@@ -92,7 +123,7 @@ INPUT:\n''' + json.dumps({'pmid': art['pmid'], 'abstract': fonte,
                     not isinstance(problemi, list) or
                     not all(isinstance(x, str) for x in problemi) or
                     not isinstance(evidenze, list) or (esito == 'pass' and not evidenze) or
-                    not all(isinstance(e, str) and e.strip() and e in fonte for e in evidenze)):
+                    not all(evidenza_presente(e, fonte) for e in evidenze)):
                 raise ValueError('Risposta di verifica non valida o evidenze non rintracciabili')
             risultato['verifica_ai'] = esito
             risultato['evidenze'] = evidenze
@@ -104,21 +135,32 @@ INPUT:\n''' + json.dumps({'pmid': art['pmid'], 'abstract': fonte,
             if not isinstance(riconciliati, list):
                 raise ValueError('Riconciliazione numerica non valida')
             coperti = set()
+            accettati = []
             for voce in riconciliati:
-                if (not isinstance(voce, dict) or voce.get('numero') not in extra or
-                        voce.get('motivo') not in ('equivalente', 'strutturale') or
-                        not isinstance(voce.get('evidenza'), str) or not voce['evidenza'].strip() or
-                        voce['evidenza'] not in fonte):
-                    raise ValueError('Riconciliazione priva di evidenza nella fonte')
+                if not isinstance(voce, dict):
+                    raise ValueError('Voce di riconciliazione non valida: atteso oggetto JSON')
+                numero = _numero_risposta(voce.get('numero'))
+                # Una voce superflua non dimostra nulla e non copre alcun extra.
+                # Non deve però far fallire una sintesi altrimenti verificata.
+                if numero is not None and numero not in extra:
+                    risultato['avvisi'].append('Riconciliazione superflua ignorata: ' + numero)
+                    continue
+                if numero is None:
+                    raise ValueError('Formato numero di riconciliazione non valido: ' + repr(voce.get('numero')))
+                if voce.get('motivo') not in ('equivalente', 'strutturale'):
+                    raise ValueError('Motivo di riconciliazione non valido per ' + numero)
+                if not evidenza_presente(voce.get('evidenza'), fonte):
+                    raise ValueError('Estratto di riconciliazione non rintracciabile per ' + numero)
                 # Anche l'equivalenza di segno deve avere il valore nella citazione.
                 if voce['motivo'] == 'equivalente':
-                    valore = voce['numero'].lstrip('-+')
+                    valore = numero.lstrip('-+')
                     if valore not in {v.lstrip('-+') for v in numeri(voce['evidenza'])}:
                         raise ValueError('Valore assente nell’evidenza di riconciliazione')
-                elif not re.fullmatch(r'\d+', voce['numero']):
+                elif not re.fullmatch(r'\d+', numero):
                     raise ValueError('Un conteggio strutturale non può giustificare percentuali o effetti')
-                coperti.add(voce['numero'])
-            risultato['numeri_riconciliati'] = riconciliati
+                coperti.add(numero)
+                accettati.append({**voce, 'numero': numero})
+            risultato['numeri_riconciliati'] = accettati
             mancanti = sorted(set(extra) - coperti)
             risultato['numeri_non_supportati'] = mancanti
             if mancanti:
@@ -128,6 +170,7 @@ INPUT:\n''' + json.dumps({'pmid': art['pmid'], 'abstract': fonte,
         except Exception as exc:
             risultato['verifica_ai'] = 'errore'
             errori.append('Verifica non disponibile: ' + str(exc))
+            risultato['numeri_non_supportati'] = extra
     risultato['approvato'] = not errori and risultato['verifica_ai'] == 'pass'
     return risultato
 
