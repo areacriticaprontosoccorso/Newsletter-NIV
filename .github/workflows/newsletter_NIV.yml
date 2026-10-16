@@ -1,6 +1,13 @@
 name: NIV Weekly Digest
 
 on:
+  pull_request:
+    paths:
+      - 'newsletter_NIV.py'
+      - 'config.py'
+      - 'quality.py'
+      - 'tests/**'
+      - '.github/workflows/newsletter_NIV.yml'
   workflow_dispatch:  # Lancio manuale e da cron-job.org
     inputs:
       dry_run:
@@ -15,7 +22,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -v
+
   invia-newsletter-niv:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,6 +47,9 @@ jobs:
 
       # Nessuna dipendenza esterna: lo script usa solo la libreria standard
       # (invio via SMTP con smtplib).
+
+      - name: Verifica test offline
+        run: python -m unittest discover -s tests -v
 
       - name: Esegui newsletter NIV
         env:

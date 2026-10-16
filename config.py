@@ -102,7 +102,7 @@ PUBMED_MAX_RECORDS = 500  # superamento segnalato nel report, mai nascosto
 PUBMED_PAGE_SIZE = 100
 QUALITY_REPORT_FILE = "quality_report.json"
 QUALITY_REPORT_MD = "quality_report.md"
-MINIMO_ARTICOLI       = 3    # sotto questa soglia si riempie per data
+MINIMO_ARTICOLI       = 1    # sotto questa soglia l'invio e' annullato; nessun riempimento per data
 MAX_PER_TEMA          = 2    # max articoli sullo stesso tema clinico (parte EM)
 # La newsletter è sulla ventilazione NON invasiva: la ventilazione invasiva entra
 # solo quando è in continuità con essa (fallimento della NIV, preossigenazione,

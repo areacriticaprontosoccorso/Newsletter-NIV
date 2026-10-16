@@ -758,15 +758,11 @@ def componi_selezione(candidati):
     n_tot = cfg.ARTICOLI_FINALI
     niv = filtra_niv(candidati, n_tot)
 
-    if niv is None:  # il filtro non ha risposto: ripiego sui più recenti
-        ordinati = sorted(
-            candidati,
-            key=lambda a: a["pubdate_dt"] or datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True,
-        )[:n_tot]
-        for a in ordinati:
-            a["origine"] = "em"
-        return ordinati, {"n_niv": 0, "n_em": len(ordinati), "filtro_ko": True}
+    if niv is None:
+        # Il filtro non ha risposto: nessun ripiego sui piu' recenti. Un articolo
+        # non vagliato non deve arrivare ai lettori; la selezione vuota annulla l'invio.
+        log.error("Filtro NIV non eseguito: nessun articolo selezionato, invio da annullare")
+        return [], {"n_niv": 0, "n_em": 0, "filtro_ko": True}
 
     mancanti = n_tot - len(niv)
     if mancanti <= 0 or not cfg.INTEGRA_CON_EM:
@@ -774,33 +770,13 @@ def componi_selezione(candidati):
 
     log.info(f"Mancano {mancanti} articoli NIV: integro con medicina d'urgenza")
     em = filtra_em(candidati, {a["pmid"] for a in niv}, mancanti)
-    em, riserva = em
+    em, _riserva = em
     articoli = niv + em
 
-    # Riempimento minimo: solo se il digest resta sotto MINIMO_ARTICOLI si attinge
-    # prima alla riserva scartata per diversità, poi ai più recenti.
-    if len(articoli) < cfg.MINIMO_ARTICOLI:
-        log.warning(
-            f"Solo {len(articoli)} articoli (minimo {cfg.MINIMO_ARTICOLI}): "
-            "completo con riserva e poi per data"
-        )
-        gia = {a["pmid"] for a in articoli}
-        altri = sorted(
-            [a for a in candidati if a["pmid"] not in gia
-             and a["pmid"] not in {r["pmid"] for r in riserva}],
-            key=lambda a: a["pubdate_dt"] or datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True,
-        )
-        for a in riserva + altri:
-            if len(articoli) >= cfg.MINIMO_ARTICOLI:
-                break
-            if a["pmid"] in gia:
-                continue
-            a["origine"] = "em"
-            articoli.append(a)
-            gia.add(a["pmid"])
-            em.append(a)
-
+    # Nessun riempimento: si pubblicano solo gli articoli confermati dai filtri,
+    # anche se sono meno di ARTICOLI_FINALI (e anche uno solo).
+    if not articoli:
+        log.warning("Nessun articolo validato dai filtri NIV/EM")
     return articoli, {"n_niv": len(niv), "n_em": len(articoli) - len(niv), "filtro_ko": False}
 
 
