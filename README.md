@@ -10,3 +10,9 @@ risponde, o se nessun articolo supera i controlli, la newsletter non viene invia
 e GitHub Actions segnala l'errore.
 
 Test offline: `python -m unittest discover -s tests -v` (eseguiti sulle PR e prima di ogni invio).
+
+### Chiamate API per run
+
+Filtro NIV+EM in una sola chiamata (due stadi nello stesso prompt), sintesi di tutti
+gli articoli in una sola chiamata, poi un controllo per articolo: 7 chiamate con 5
+articoli. Con `INTEGRA_CON_EM = False` il filtro e' solo NIV.

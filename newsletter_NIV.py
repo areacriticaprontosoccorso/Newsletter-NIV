@@ -651,15 +651,23 @@ def _filtro_json(candidati, prompt, system, n, max_per_tema=None, etichetta="",
     invasiva in continuità con la non invasiva): oltre il tetto finiscono in
     riserva, da cui si attinge solo se il digest resterebbe troppo corto.
     Solleva l'eccezione al chiamante se la chiamata API fallisce del tutto."""
-    map_pmid = {a["pmid"]: a for a in candidati}
-    selezionati, riserva, conteggio_temi = [], [], {}
-    n_collegati = 0
     risposta = chiama_claude(
         prompt,
         max_tokens=cfg.MAX_TOKENS_FILTRO,
         system=system,
     )
-    for voce in _estrai_json_array(risposta):
+    return _applica_voci(_estrai_json_array(risposta), candidati, n,
+                         max_per_tema, etichetta, max_collegati)
+
+
+def _applica_voci(voci, candidati, n, max_per_tema=None, etichetta="",
+                  max_collegati=None):
+    """Valida le voci del filtro contro i candidati e applica i tetti.
+    Restituisce (selezionati, riserva)."""
+    map_pmid = {a["pmid"]: a for a in candidati}
+    selezionati, riserva, conteggio_temi = [], [], {}
+    n_collegati = 0
+    for voce in voci:
         if len(selezionati) >= n:
             break
         if not isinstance(voce, dict):
@@ -752,10 +760,62 @@ def filtra_em(candidati, esclusi_pmid, n):
     return selezionati, riserva
 
 
+def filtra_misto(candidati, n):
+    """Stadi NIV ed EM in UNA chiamata. Restituisce (niv, em) oppure None se il
+    filtro non e' stato eseguito (None != ([], []): nessun pertinente e' un esito
+    legittimo). Lo stadio A ha la precedenza; i tetti si applicano in codice."""
+    pool = _limita_candidati(candidati)
+    prompt = cfg.PROMPT_FILTRO_MISTO.format(n=n, articoli=_blocchi_prompt(pool))
+    log.info(f"Filtro NIV+EM (una chiamata) su {len(pool)} candidati -> max {n}")
+    if cfg.DRY_RUN:
+        log.info("--- CANDIDATI SOTTOPOSTI AL FILTRO ---")
+        for a in pool:
+            tipi = ", ".join(a.get("pubtypes") or []) or "tipo n/d"
+            log.info(f"    {a['pmid']} [{a['rivista']}] ({tipi}) {a['titolo'][:100]}")
+        log.info("--- FINE CANDIDATI ---")
+    try:
+        risposta = chiama_claude(prompt, max_tokens=cfg.MAX_TOKENS_FILTRO_MISTO,
+                                 system=cfg.SYSTEM_FILTRO_MISTO)
+        voci = [v for v in _estrai_json_array(risposta) if isinstance(v, dict)]
+    except Exception as e:
+        log.error(f"Filtro NIV+EM fallito ({e})")
+        return None
+    stadio = lambda v: str(v.get("stadio", "A")).strip().upper()
+    niv, _ = _applica_voci([v for v in voci if stadio(v) != "B"], pool, n,
+                           etichetta="NIV", max_collegati=cfg.MAX_COLLEGATI)
+    for a in niv:
+        a["origine"] = "niv"
+    gia = {a["pmid"] for a in niv}
+    mancanti = n - len(niv)
+    em = []
+    if mancanti > 0:
+        voci_b = [v for v in voci if stadio(v) == "B"
+                  and str(v.get("pmid", "")).strip() not in gia]
+        em, _ = _applica_voci(voci_b, pool, mancanti,
+                              max_per_tema=cfg.MAX_PER_TEMA, etichetta="EM")
+        for a in em:
+            a["origine"] = "em"
+    n_coll = sum(1 for a in niv if a.get("categoria") == "collegata")
+    log.info(f"Articoli NIV pertinenti: {len(niv)} ({len(niv) - n_coll} non invasiva, "
+             f"{n_coll} collegata); sostitutivi EM: {len(em)}")
+    return niv, em
+
+
 def componi_selezione(candidati):
     """Restituisce (articoli, stato).
     stato = {"n_niv": int, "n_em": int, "filtro_ko": bool}"""
     n_tot = cfg.ARTICOLI_FINALI
+    if cfg.INTEGRA_CON_EM:
+        esito = filtra_misto(candidati, n_tot)
+        if esito is None:
+            log.error("Filtro non eseguito: nessun articolo selezionato, invio da annullare")
+            return [], {"n_niv": 0, "n_em": 0, "filtro_ko": True}
+        niv, em = esito
+        articoli = niv + em
+        if not articoli:
+            log.warning("Nessun articolo validato dai filtri NIV/EM")
+        return articoli, {"n_niv": len(niv), "n_em": len(em), "filtro_ko": False}
+
     niv = filtra_niv(candidati, n_tot)
 
     if niv is None:
@@ -764,20 +824,10 @@ def componi_selezione(candidati):
         log.error("Filtro NIV non eseguito: nessun articolo selezionato, invio da annullare")
         return [], {"n_niv": 0, "n_em": 0, "filtro_ko": True}
 
-    mancanti = n_tot - len(niv)
-    if mancanti <= 0 or not cfg.INTEGRA_CON_EM:
-        return niv, {"n_niv": len(niv), "n_em": 0, "filtro_ko": False}
-
-    log.info(f"Mancano {mancanti} articoli NIV: integro con medicina d'urgenza")
-    em = filtra_em(candidati, {a["pmid"] for a in niv}, mancanti)
-    em, _riserva = em
-    articoli = niv + em
-
-    # Nessun riempimento: si pubblicano solo gli articoli confermati dai filtri,
-    # anche se sono meno di ARTICOLI_FINALI (e anche uno solo).
-    if not articoli:
-        log.warning("Nessun articolo validato dai filtri NIV/EM")
-    return articoli, {"n_niv": len(niv), "n_em": len(articoli) - len(niv), "filtro_ko": False}
+    # INTEGRA_CON_EM = False: il digest esce corto, solo con articoli NIV.
+    if not niv:
+        log.warning("Nessun articolo NIV validato dal filtro")
+    return niv, {"n_niv": len(niv), "n_em": 0, "filtro_ko": False}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -853,11 +903,17 @@ def sintetizza(art, correzioni=None):
 
 
 def _sintetizza_gruppo(articoli, origine):
-    """Sintetizza in UNA chiamata tutti gli articoli della stessa origine."""
+    """Sintetizza in UNA chiamata tutti gli articoli indicati. Con origine "misto"
+    NIV ed EM stanno nella stessa chiamata e ogni blocco porta il suo AMBITO."""
     if not articoli:
         return
-    prompt_multi, _, system = _prompt_sintesi(origine)
+    misto = origine == "misto"
+    if misto:
+        prompt_multi, system = cfg.PROMPT_SINTESI_MULTI_MISTO, cfg.SYSTEM_SINTESI_MISTO
+    else:
+        prompt_multi, _, system = _prompt_sintesi(origine)
     blocchi = [
+        (f"AMBITO: {'EM' if a.get('origine') == 'em' else 'NIV'}\n" if misto else "") +
         f"PMID: {a['pmid']}\n"
         f"Titolo: {a['titolo']}\n"
         f"Autori: {a['autori']}\n"
@@ -893,9 +949,9 @@ def _sintetizza_gruppo(articoli, origine):
 
 
 def sintetizza_articoli(articoli):
-    """Due chiamate al massimo: una per gli articoli NIV, una per i sostitutivi EM."""
-    _sintetizza_gruppo([a for a in articoli if a.get("origine") != "em"], "niv")
-    _sintetizza_gruppo([a for a in articoli if a.get("origine") == "em"], "em")
+    """UNA chiamata per tutti gli articoli, NIV ed EM insieme."""
+    _sintetizza_gruppo(articoli, "misto" if any(a.get("origine") == "em" for a in articoli)
+                       else "niv")
     return articoli
 
 
