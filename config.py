@@ -102,7 +102,7 @@ PUBMED_MAX_RECORDS = 500  # superamento segnalato nel report, mai nascosto
 PUBMED_PAGE_SIZE = 100
 QUALITY_REPORT_FILE = "quality_report.json"
 QUALITY_REPORT_MD = "quality_report.md"
-MINIMO_ARTICOLI       = 3    # sotto questa soglia si riempie per data
+MINIMO_ARTICOLI       = 1    # sotto questa soglia l'invio e' annullato; nessun riempimento per data
 MAX_PER_TEMA          = 2    # max articoli sullo stesso tema clinico (parte EM)
 # La newsletter è sulla ventilazione NON invasiva: la ventilazione invasiva entra
 # solo quando è in continuità con essa (fallimento della NIV, preossigenazione,
@@ -116,6 +116,7 @@ INTEGRA_CON_EM = True
 
 # NB: NON reintrodurre "temperature": è deprecato per questo modello (HTTP 400).
 MAX_TOKENS_FILTRO          = 800
+MAX_TOKENS_FILTRO_MISTO    = 1200  # due stadi in una risposta
 MAX_TOKENS_SINTESI_MULTI   = 4000
 MAX_TOKENS_SINTESI_SINGOLA = 800
 
@@ -343,6 +344,54 @@ Nei valori testuali NON usare mai virgolette doppie: per citare un nome, un term
 ]
 
 Ordina dal più rilevante al meno rilevante."""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FILTRO MISTO — stadi NIV ed EM in UNA sola chiamata
+# ═══════════════════════════════════════════════════════════════════════════════
+# Costruito dai due prompt sopra, per non far divergere i criteri: la parte prima di
+# "ARTICOLI CANDIDATI:" di ciascuno resta identica.
+_TESTA_NIV = PROMPT_FILTRO_NIV.split("ARTICOLI CANDIDATI:")[0].rstrip()
+_TESTA_EM = PROMPT_FILTRO_EM.split("ARTICOLI CANDIDATI:")[0].rstrip().replace("{n}", "R")
+
+SYSTEM_FILTRO_MISTO = """Sei un medico strutturato di Area Critica e Pronto Soccorso italiano,
+esperto di insufficienza respiratoria acuta, di ventilazione NON invasiva e di
+medicina d'urgenza. Selezioni la letteratura settimanale per i colleghi del tuo
+reparto. Sei severo: preferisci una selezione corta e centrata a una lunga e
+annacquata, e non lasci che la newsletter scivoli sulla ventilazione invasiva in
+terapia intensiva.
+
+""" + CONTESTO_PS
+
+PROMPT_FILTRO_MISTO = """Il compito ha DUE STADI, da eseguire in sequenza sulla STESSA lista di articoli.
+Lo STADIO A ha la precedenza: lo STADIO B serve solo a riempire le posizioni che
+l'STADIO A lascia libere.
+
+=== STADIO A — SUPPORTO RESPIRATORIO NON INVASIVO (al massimo {n} articoli) ===
+""" + _TESTA_NIV + """
+
+=== STADIO B — MEDICINA D'URGENZA ===
+Sia R = {n} meno il numero di articoli selezionati nello STADIO A. Se R è zero,
+salta lo STADIO B. Nello STADIO B considera SOLO articoli NON selezionati nello
+STADIO A; non puoi riproporre un articolo dello STADIO A.
+""" + _TESTA_EM + """
+
+ARTICOLI CANDIDATI:
+{articoli}
+
+FORMATO DI RISPOSTA - restituisci SOLO un array JSON valido, senza testo prima o dopo,
+senza blocchi markdown. Scegli esclusivamente PMID presenti nella lista qui sopra:
+non inventare né modificare PMID. Se nessun articolo è pertinente restituisci
+esattamente: []
+Ogni oggetto porta il campo "stadio" ("A" oppure "B"). Il campo "categoria"
+("non-invasiva" o "collegata") serve solo per lo STADIO A. Gli articoli dello
+STADIO A vengono prima, ordinati dal più rilevante, con "non-invasiva" davanti a
+"collegata"; poi quelli dello STADIO B, dal più rilevante.
+Nei valori testuali NON usare mai virgolette doppie: per citare un nome, un termine o una frase usa gli apici singoli ('...') oppure le caporali «...». Una virgoletta doppia dentro il testo rompe il formato JSON.
+
+[
+  {{"pmid": "12345678", "stadio": "A", "tema": "HFNC", "categoria": "non-invasiva", "perche": "motivo in max 15 parole"}},
+  {{"pmid": "23456789", "stadio": "B", "tema": "sepsi", "perche": "motivo in max 15 parole"}}
+]"""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SINTESI
@@ -577,6 +626,35 @@ Nei valori testuali NON usare mai virgolette doppie: per citare un nome, un term
     "tipo": "conferma"
   }}
 ]"""
+
+
+# --- Sintesi mista: NIV ed EM in UNA sola chiamata -----------------------------
+# Derivata dal prompt NIV: cambia solo l'ambito della ricaduta, indicato per articolo.
+def _sostituisci_unico(testo, vecchio, nuovo):
+    if testo.count(vecchio) != 1:
+        raise RuntimeError(f"Prompt di sintesi cambiato: frase non trovata ({vecchio[:50]}...)")
+    return testo.replace(vecchio, nuovo)
+
+_RICADUTA_NIV = ("ricaduta sulla pratica nella gestione dell'insufficienza respiratoria acuta "
+                 "e del supporto ventilatorio non invasivo in PS/Area Critica.")
+_RILEVANZA_NIV = "per il supporto respiratorio non invasivo in Pronto Soccorso."
+
+PROMPT_SINTESI_MULTI_MISTO = _sostituisci_unico(
+    _sostituisci_unico(
+        PROMPT_SINTESI_MULTI, _RICADUTA_NIV,
+        "ricaduta sulla pratica secondo l'AMBITO indicato per ciascun articolo: per "
+        "\"NIV\" nella gestione dell'insufficienza respiratoria acuta e del supporto "
+        "ventilatorio non invasivo in PS/Area Critica; per \"EM\" nella pratica in "
+        "Pronto Soccorso e Area Critica."),
+    _RILEVANZA_NIV,
+    "per l'AMBITO indicato (\"NIV\": supporto respiratorio non invasivo in Pronto "
+    "Soccorso; \"EM\": pratica in Pronto Soccorso).")
+
+SYSTEM_SINTESI_MISTO = """Sei un medico di Area Critica e Pronto Soccorso italiano esperto in
+ventilazione non invasiva, supporto respiratorio e letteratura di medicina d'urgenza, e in
+traduzione medico-scientifica dall'inglese all'italiano.
+
+""" + REGOLE_COMUNI
 
 
 def valida_config():
