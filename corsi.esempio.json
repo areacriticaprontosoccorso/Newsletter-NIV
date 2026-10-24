@@ -1,0 +1,18 @@
+{
+  "corsi": [
+    {
+      "titolo": "Corso base di ecografia in emergenza-urgenza",
+      "data_inizio": "2026-11-14",
+      "data_fine": "2026-11-15",
+      "ora": "9:00–17:00",
+      "luogo": "Torino, Ospedale San Giovanni Bosco",
+      "descrizione": "Due giornate con parte pratica su simulatori e modelli vivi: FAST, ecografia polmonare, ecocardiografia focalizzata, accessi vascolari.",
+      "posti": "Massimo 20 partecipanti",
+      "iscrizioni_fino": "2026-11-07",
+      "link": "https://esempio.it/iscrizioni",
+      "newsletter": ["pocus", "niv"],
+      "mostra_dal": "2026-10-01",
+      "attivo": true
+    }
+  ]
+}

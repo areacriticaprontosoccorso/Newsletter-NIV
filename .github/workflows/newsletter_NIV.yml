@@ -3,6 +3,9 @@ name: NIV Weekly Digest
 on:
   pull_request:
     paths:
+      - 'corsi.py'
+      - 'corsi.json'
+      - 'corsi.esempio.json'
       - 'newsletter_NIV.py'
       - 'config.py'
       - 'quality.py'
@@ -31,6 +34,10 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m unittest discover -s tests -v
+      - name: Controlla corsi.json
+        # Non blocca l'invio: un errore compare come avviso giallo nel riepilogo del run.
+        continue-on-error: true
+        run: python corsi.py
 
   invia-newsletter-niv:
     if: github.event_name != 'pull_request'
@@ -50,6 +57,11 @@ jobs:
 
       - name: Verifica test offline
         run: python -m unittest discover -s tests -v
+
+      - name: Controlla corsi.json
+        # Non blocca l'invio: un errore compare come avviso giallo nel riepilogo del run.
+        continue-on-error: true
+        run: python corsi.py
 
       - name: Esegui newsletter NIV
         env:

@@ -27,6 +27,7 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 
 import config as cfg
+import corsi as avvisi
 from quality import controlla_sintesi, salva_report
 
 TUTTE_RIVISTE = [r for r in cfg.RIVISTE_NIV + cfg.RIVISTE
@@ -1018,7 +1019,7 @@ def _badge_html(origine):
             f'padding:2px 6px;border-radius:3px;">NIV</span> ')
 
 
-def build_html(articoli, stato):
+def build_html(articoli, stato, corsi=None):
     wl = numero_settimana()
     arts = ""
     for i, a in enumerate(articoli):
@@ -1066,6 +1067,7 @@ def build_html(articoli, stato):
     niv_str = " - ".join(_niv_nomi[:5])
     if len(_niv_nomi) > 5:
         niv_str += f" e altre {len(_niv_nomi) - 5}"
+    blocco_corsi = avvisi.html_corsi(corsi, cfg.COLOR_ACCENT, anteprima_locale=cfg.DRY_RUN)
     nota = testo_nota(stato)
     disclaimer = (
         '<tr><td style="background:#fff8e1;padding:14px 32px;border-bottom:1px solid #f0e0a0;">'
@@ -1119,6 +1121,7 @@ def build_html(articoli, stato):
           <span style="font-family:monospace;font-size:10px;color:#889;letter-spacing:1px;">NIV: {niv_str} + generaliste</span>
         </td>
       </tr>
+      {blocco_corsi}
       {disclaimer}
       <tr><td style="background:#ffffff;"><table width="100%" cellpadding="0" cellspacing="0">{arts}</table></td></tr>
       <tr>
@@ -1233,7 +1236,7 @@ def build_tg_footer():
     )
 
 
-def invia_telegram(articoli, stato):
+def invia_telegram(articoli, stato, corsi=None):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
     if not bot_token or not chat_id:
@@ -1243,6 +1246,13 @@ def invia_telegram(articoli, stato):
     if telegram_send_message(bot_token, chat_id, build_tg_header(articoli, stato)):
         successi += 1
     time.sleep(1)
+    # Avviso corsi (se ce ne sono, con locandina), subito dopo l'intestazione
+    n_corsi = len(corsi or [])
+    if n_corsi:
+        ok_corsi, _ = avvisi.invia_telegram(
+            bot_token, chat_id, corsi,
+            lambda testo: telegram_send_message(bot_token, chat_id, testo))
+        successi += ok_corsi
     for i, a in enumerate(articoli, 1):
         msg = build_tg_articolo(i, a)
         if len(msg) > 4096:
@@ -1252,7 +1262,7 @@ def invia_telegram(articoli, stato):
         time.sleep(1)
     if telegram_send_message(bot_token, chat_id, build_tg_footer()):
         successi += 1
-    totale = len(articoli) + 2
+    totale = len(articoli) + 2 + n_corsi
     log.info(f"Telegram: inviati {successi}/{totale} messaggi al canale")
     return successi == totale
 
@@ -1321,7 +1331,11 @@ def _main():
     stato['n_niv'] = sum(a.get('origine') == 'niv' for a in selezionati)
     stato['n_em'] = len(selezionati) - stato['n_niv']
 
-    html_body = build_html(selezionati, stato)
+    corsi = avvisi.carica_corsi("niv", base_url=cfg.URL_RAW_REPO)
+    if corsi:
+        log.info("Avvisi corsi: " + "; ".join(
+            f"{c['titolo'][:50]} ({avvisi.data_leggibile(c)})" for c in corsi))
+    html_body = build_html(selezionati, stato, corsi)
 
     if cfg.DRY_RUN:
         with open(cfg.DRY_RUN_FILE, "w", encoding="utf-8") as f:
@@ -1347,7 +1361,7 @@ def _main():
         f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}",
         html_body, destinatari,
     )
-    ok_telegram = invia_telegram(selezionati, stato)
+    ok_telegram = invia_telegram(selezionati, stato, corsi)
 
     log.info("=== Email: OK ===" if ok_email else "=== Email: FALLITO ===")
     log.info("=== Telegram: OK ===" if ok_telegram else "=== Telegram: FALLITO o non configurato ===")
