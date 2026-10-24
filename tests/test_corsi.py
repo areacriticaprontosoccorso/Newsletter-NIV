@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 import config as cfg
@@ -88,6 +88,46 @@ class CaricamentoTest(unittest.TestCase):
         self.assertIsInstance(corsi.carica_corsi("pocus", oggi=OGGI), list)
         esempio = os.path.join(os.path.dirname(corsi.__file__), "corsi.esempio.json")
         self.assertEqual(len(corsi.carica_corsi("pocus", oggi=date(2026, 10, 24), percorso=esempio)), 1)
+
+
+class FrequenzaTest(unittest.TestCase):
+    def mostrato(self, oggi, **kw):
+        p = scrivi([corso(**kw)])
+        try:
+            return bool(corsi.carica_corsi("pocus", oggi=oggi, percorso=p))
+        finally:
+            os.unlink(p)
+
+    def test_ogni_due_settimane_alterna(self):
+        venerdi = [date(2026, 10, 30) + timedelta(weeks=k) for k in range(6)]
+        esiti = [self.mostrato(v, data_inizio="2027-03-09", ogni_settimane=2) for v in venerdi]
+        self.assertEqual(esiti, [True, False, True, False, True, False])
+
+    def test_senza_campo_ogni_settimana(self):
+        venerdi = [date(2026, 10, 30) + timedelta(weeks=k) for k in range(4)]
+        self.assertTrue(all(self.mostrato(v, data_inizio="2027-03-09") for v in venerdi))
+
+    def test_ultima_uscita_prima_del_corso_sempre(self):
+        # 26/02/2027 sarebbe una settimana "saltata", ma il corso del 03/03 e' entro 7 giorni
+        self.assertFalse(self.mostrato(date(2027, 2, 26), data_inizio="2027-03-09", ogni_settimane=2))
+        self.assertTrue(self.mostrato(date(2027, 2, 26), data_inizio="2027-03-03", ogni_settimane=2))
+
+    def test_conteggio_parte_da_mostra_dal(self):
+        self.assertTrue(self.mostrato(date(2027, 3, 12), data_inizio="2027-11-09",
+                                      mostra_dal="2027-03-11", ogni_settimane=2))
+        self.assertFalse(self.mostrato(date(2027, 3, 19), data_inizio="2027-11-09",
+                                       mostra_dal="2027-03-11", ogni_settimane=2))
+
+    def test_valore_non_valido_diventa_ogni_settimana(self):
+        self.assertTrue(self.mostrato(date(2026, 11, 6), data_inizio="2027-03-09", ogni_settimane="due"))
+
+    def test_verifica_segnala_valore_non_valido(self):
+        p = scrivi([corso(ogni_settimane=0), corso(ogni_settimane="2"), corso(ogni_settimane=2.5)])
+        try:
+            probl = corsi.verifica(p)
+        finally:
+            os.unlink(p)
+        self.assertEqual(sum("ogni_settimane" in x for x in probl), 2)
 
 
 class VerificaTest(unittest.TestCase):

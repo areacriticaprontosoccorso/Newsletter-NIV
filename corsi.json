@@ -10,7 +10,10 @@
       "descrizione": "Corso teorico-pratico ECM di 2 giornate: HFNC, CPAP e NIV dall'area critica al domicilio; edema polmonare, BPCO, polmonite e ARDS, trauma toracico; monitoraggio, fallimento e paziente intollerante, con esercitazioni in piccoli gruppi. Medici 350 €, specializzandi 200 €. Iscrizione su ecm.unito.it/ecm, sezione Eventi ECM. II edizione: 9–10 novembre 2027.",
       "link": "https://ecm.unito.it/ecm",
       "immagine": "locandine/corso-niv-2027.jpg",
-      "newsletter": ["niv"]
+      "newsletter": [
+        "niv"
+      ],
+      "ogni_settimane": 2
     },
     {
       "titolo": "Insufficienza respiratoria acuta: dalla CPAP alla ventilazione non invasiva – II edizione",
@@ -22,8 +25,11 @@
       "descrizione": "Corso teorico-pratico ECM di 2 giornate: HFNC, CPAP e NIV dall'area critica al domicilio; edema polmonare, BPCO, polmonite e ARDS, trauma toracico; monitoraggio, fallimento e paziente intollerante, con esercitazioni in piccoli gruppi. Medici 350 €, specializzandi 200 €. Iscrizione su ecm.unito.it/ecm, sezione Eventi ECM.",
       "link": "https://ecm.unito.it/ecm",
       "immagine": "locandine/corso-niv-2027.jpg",
-      "newsletter": ["niv"],
-      "mostra_dal": "2027-03-11"
+      "newsletter": [
+        "niv"
+      ],
+      "mostra_dal": "2027-03-11",
+      "ogni_settimane": 2
     }
   ]
 }

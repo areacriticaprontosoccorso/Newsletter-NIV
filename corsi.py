@@ -17,7 +17,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 log = logging.getLogger("corsi")
@@ -27,7 +27,10 @@ MAX_CORSI = 2            # al massimo due avvisi per uscita: i piu' vicini nel t
 MAX_DESCRIZIONE = 400    # caratteri
 MAX_IMMAGINE = 5 * 1024 * 1024   # byte: oltre, l'immagine viene ignorata (il corso resta)
 ESTENSIONI_IMMAGINE = (".jpg", ".jpeg", ".png", ".gif")
-CAPTION_TELEGRAM = 1024  # limite di Telegram per la didascalia di una foto
+CAPTION_TELEGRAM = 1024
+# Riferimento per "ogni_settimane": le settimane si contano da questo lunedi'
+# (o dal lunedi' della settimana di "mostra_dal", se indicato).
+LUNEDI_RIFERIMENTO = date(2026, 1, 5)  # limite di Telegram per la didascalia di una foto
 
 _MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
          "agosto", "settembre", "ottobre", "novembre", "dicembre"]
@@ -105,6 +108,27 @@ def _immagine(valore, cartella, base_url):
     return file, url
 
 
+def _settimana_di_uscita(oggi, inizio, mostra_dal, ogni):
+    """True se in questa settimana il corso va annunciato, con frequenza `ogni`
+    settimane. L'ultima uscita prima del corso (7 giorni prima o meno) lo annuncia sempre."""
+    if ogni <= 1 or 0 <= (inizio - oggi).days <= 7:
+        return True
+    rif = mostra_dal or LUNEDI_RIFERIMENTO
+    lunedi = lambda d: d - timedelta(days=d.weekday())
+    return ((lunedi(oggi) - lunedi(rif)).days // 7) % ogni == 0
+
+
+def _ogni(valore):
+    """Frequenza in settimane (1-8); None se il valore non e' valido."""
+    if valore in (None, ""):
+        return 1
+    try:
+        n = int(valore)
+    except (TypeError, ValueError):
+        return None
+    return n if 1 <= n <= 8 and str(valore).strip() == str(n) else None
+
+
 def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI, base_url=""):
     """Corsi da annunciare oggi su `newsletter` ('pocus' o 'niv'), dal piu' vicino.
     Mai eccezioni: file mancante o rotto -> [] (con un avviso nel log)."""
@@ -143,6 +167,14 @@ def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI, base_u
                 fine = inizio
             mostra_dal = _data(v.get("mostra_dal"))
             if fine < oggi or (mostra_dal and oggi < mostra_dal):
+                continue
+            ogni = _ogni(v.get("ogni_settimane"))
+            if ogni is None:
+                _avviso(f"voce {i} ({titolo}): 'ogni_settimane' deve essere un numero da 1 a 8; "
+                        "uso 1 (ogni settimana)")
+                ogni = 1
+            if not _settimana_di_uscita(oggi, inizio, mostra_dal, ogni):
+                log.info(f"Corso '{titolo[:50]}': non in questa settimana (ogni {ogni} settimane)")
                 continue
             iscr = _data(v.get("iscrizioni_fino"))
             img_file, img_url = _immagine(v.get("immagine"), os.path.dirname(
@@ -349,6 +381,8 @@ def verifica(percorso=None):
             v.get("immagine"), os.path.dirname(os.path.abspath(percorso)))
         if problema:
             problemi.append(f"{nome}: 'immagine' {problema}")
+        if _ogni(v.get("ogni_settimane")) is None:
+            problemi.append(f"{nome}: 'ogni_settimane' deve essere un numero da 1 a 8")
         if v.get("link") and not _url(v.get("link")):
             problemi.append(f"{nome}: 'link' deve iniziare con https://")
         dove = v.get("newsletter")
