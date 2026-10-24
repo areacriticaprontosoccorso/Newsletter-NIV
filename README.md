@@ -50,5 +50,6 @@ Si gestiscono dal file **`corsi.json`** (da GitHub: apri il file, matita, modifi
 - `newsletter`: dove mostrarlo (`pocus`, `niv`); se manca, compare in entrambe.
 - `mostra_dal`: non mostrarlo prima di quella data. `attivo: false`: sospende l'avviso senza cancellarlo.
 - Al massimo **2 corsi** per uscita, i piu' vicini nel tempo.
+- `immagine`: locandina del corso. Carica il file nella cartella `locandine/` (GitHub: *Add file > Upload files*) e scrivi `"immagine": "locandine/nome-file.jpg"`; in alternativa un URL `https://...`. Formati jpg, png, gif, massimo 5 MB (meglio sotto 1 MB). Compare in cima all'avviso nella mail (cliccabile se c'e' il `link`), come foto su Telegram. Se il file manca o e' troppo grande l'avviso esce senza locandina.
 - Un esempio completo e' in `corsi.esempio.json`.
 - Se il file ha un errore, la newsletter parte lo stesso senza avvisi e il run di GitHub Actions mostra un avviso giallo ("Controlla corsi.json"). `python corsi.py` lo controlla in locale.

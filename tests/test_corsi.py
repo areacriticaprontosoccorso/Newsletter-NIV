@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 import config as cfg
 import corsi
@@ -122,6 +123,107 @@ class VerificaTest(unittest.TestCase):
                                                      "corsi.esempio.json")), [])
 
 
+PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00"
+       b"\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7\x9a\xa0\xa0"
+       b"\x00\x00\x00\x00IEND\xaeB`\x82")
+
+
+class ImmagineTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.dir, "locandine"))
+        self.png = os.path.join(self.dir, "locandine", "corso uno.png")
+        with open(self.png, "wb") as f:
+            f.write(PNG)
+        self.json = os.path.join(self.dir, "corsi.json")
+
+    def carica(self, **kw):
+        with open(self.json, "w", encoding="utf-8") as f:
+            json.dump({"corsi": [corso(**kw)]}, f)
+        r = corsi.carica_corsi("pocus", oggi=OGGI, percorso=self.json, base_url="https://x.it/repo/main/")
+        return r[0]
+
+    def test_percorso_nel_repo_diventa_file_e_url_pubblico(self):
+        c = self.carica(immagine="locandine/corso uno.png")
+        self.assertEqual(c["immagine_file"], self.png)
+        self.assertEqual(c["immagine_url"], "https://x.it/repo/main/locandine/corso%20uno.png")
+        self.assertEqual(self.carica(immagine="./locandine/corso uno.png")["immagine_file"], self.png)
+
+    def test_url_https_usato_cosi_com_e(self):
+        c = self.carica(immagine="https://esempio.it/l.jpg")
+        self.assertIsNone(c["immagine_file"])
+        self.assertEqual(c["immagine_url"], "https://esempio.it/l.jpg")
+
+    def test_immagini_non_valide_scartate_ma_il_corso_resta(self):
+        for img in ("locandine/non_esiste.png", "../segreto.png", "/etc/passwd.png",
+                    "locandine/corso uno.exe", "javascript:alert(1)", "ftp://a/b.png"):
+            c = self.carica(immagine=img)
+            self.assertEqual((c["immagine_file"], c["immagine_url"]), (None, ""), img)
+            self.assertEqual(c["titolo"], "Corso POCUS")
+
+    def test_immagine_troppo_grande_scartata(self):
+        with patch.object(corsi, "MAX_IMMAGINE", 10):
+            c = self.carica(immagine="locandine/corso uno.png")
+        self.assertIsNone(c["immagine_file"])
+
+    def test_html_con_locandina_e_anteprima_locale(self):
+        c = self.carica(immagine="locandine/corso uno.png", link="https://esempio.it")
+        h = corsi.html_corsi([c])
+        self.assertIn('src="https://x.it/repo/main/locandine/corso%20uno.png"', h)
+        self.assertIn('alt="Locandina: Corso POCUS"', h)
+        self.assertIn('<a href="https://esempio.it"><img', h)
+        self.assertIn("data:image/png;base64,", corsi.html_corsi([c], anteprima_locale=True))
+
+    def test_html_senza_locandina_se_manca_url_pubblico(self):
+        with open(self.json, "w", encoding="utf-8") as f:
+            json.dump({"corsi": [corso(immagine="locandine/corso uno.png")]}, f)
+        c = corsi.carica_corsi("pocus", oggi=OGGI, percorso=self.json)[0]      # senza base_url
+        self.assertNotIn("<img", corsi.html_corsi([c]))
+
+    def test_verifica_segnala_immagine_mancante(self):
+        with open(self.json, "w", encoding="utf-8") as f:
+            json.dump({"corsi": [corso(immagine="locandine/manca.png")]}, f)
+        self.assertIn("non trovato", " ".join(corsi.verifica(self.json)))
+        with open(self.json, "w", encoding="utf-8") as f:
+            json.dump({"corsi": [corso(immagine="locandine/corso uno.png")]}, f)
+        self.assertEqual(corsi.verifica(self.json), [])
+
+    def test_telegram_foto_con_didascalia(self):
+        c = self.carica(immagine="locandine/corso uno.png")
+        foto, testi = [], []
+        ok, tot = corsi.invia_telegram("t", "c", [c], lambda t: testi.append(t) or True,
+                                       lambda tok, ch, url, cap: foto.append((url, cap)) or True, pausa=0)
+        self.assertEqual((ok, tot), (1, 1))
+        self.assertEqual(testi, [])
+        self.assertEqual(foto[0][0], c["immagine_url"])
+        self.assertIn("Corso POCUS", foto[0][1])
+
+    def test_telegram_didascalia_lunga_foto_poi_testo(self):
+        c = self.carica(immagine="locandine/corso uno.png", descrizione="x" * 400, luogo="L" * 150,
+                        posti="P" * 80, ora="O" * 60, titolo="T" * 160)
+        foto, testi = [], []
+        with patch.object(corsi, "CAPTION_TELEGRAM", 50):
+            ok, _ = corsi.invia_telegram("t", "c", [c], lambda t: testi.append(t) or True,
+                                         lambda tok, ch, url, cap: foto.append(cap) or True, pausa=0)
+        self.assertEqual(ok, 1)
+        self.assertEqual(foto, [""])
+        self.assertEqual(len(testi), 1)
+
+    def test_telegram_foto_fallita_ripiega_sul_testo(self):
+        c = self.carica(immagine="locandine/corso uno.png")
+        testi = []
+        ok, _ = corsi.invia_telegram("t", "c", [c], lambda t: testi.append(t) or True,
+                                     lambda *a: False, pausa=0)
+        self.assertEqual((ok, len(testi)), (1, 1))
+
+    def test_telegram_senza_immagine_solo_testo(self):
+        c = self.carica()
+        testi = []
+        ok, _ = corsi.invia_telegram("t", "c", [c], lambda t: testi.append(t) or True,
+                                     lambda *a: self.fail("nessuna foto attesa"), pausa=0)
+        self.assertEqual((ok, len(testi)), (1, 1))
+
+
 class FormattazioneTest(unittest.TestCase):
     def c(self, **kw):
         p = scrivi([corso(**kw)])
@@ -151,10 +253,9 @@ class FormattazioneTest(unittest.TestCase):
 
     def test_telegram_escape_e_lunghezza(self):
         c = self.c(titolo="A & B <i>", descrizione="x" * 1000)
-        t = corsi.testo_telegram([c])
+        t = corsi.testo_telegram_corso(c)
         self.assertIn("A &amp; B &lt;i&gt;", t)
         self.assertLessEqual(len(t), 4096)
-        self.assertEqual(corsi.testo_telegram([]), "")
 
     def test_facebook_testo(self):
         t = corsi.testo_facebook(self.c(luogo="Torino", link="https://esempio.it"))

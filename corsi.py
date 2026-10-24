@@ -8,10 +8,15 @@ corso l'avviso sparisce da solo.
 Solo libreria standard. Un errore in questo modulo NON deve mai bloccare la
 newsletter: carica_corsi() non solleva eccezioni e in caso di problemi restituisce [].
 """
+import base64
 import html
 import json
 import logging
+import mimetypes
 import os
+import time
+import urllib.parse
+import urllib.request
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -20,6 +25,9 @@ log = logging.getLogger("corsi")
 FILE_CORSI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "corsi.json")
 MAX_CORSI = 2            # al massimo due avvisi per uscita: i piu' vicini nel tempo
 MAX_DESCRIZIONE = 400    # caratteri
+MAX_IMMAGINE = 5 * 1024 * 1024   # byte: oltre, l'immagine viene ignorata (il corso resta)
+ESTENSIONI_IMMAGINE = (".jpg", ".jpeg", ".png", ".gif")
+CAPTION_TELEGRAM = 1024  # limite di Telegram per la didascalia di una foto
 
 _MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
          "agosto", "settembre", "ottobre", "novembre", "dicembre"]
@@ -59,7 +67,45 @@ def _url(valore):
     return u if u.lower().startswith(("https://", "http://")) and " " not in u else ""
 
 
-def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI):
+def _controlla_immagine(valore, cartella):
+    """(percorso relativo, file assoluto, problema). Per un URL https: (None, None, '').
+    Se c'e' un problema, il campo `problema` lo descrive."""
+    v = str(valore or "").strip()
+    if not v or v.lower().startswith(("https://", "http://")):
+        return None, None, "" if _url(v) or not v else "URL immagine non valido"
+    rel = v.replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
+    if (rel.startswith("/") or ".." in rel.split("/")
+            or not rel.lower().endswith(ESTENSIONI_IMMAGINE)):
+        return None, None, ("deve essere un percorso nel repo (es. locandine/corso.jpg; "
+                            "formati jpg, png, gif) o un URL https")
+    file = os.path.join(cartella, rel)
+    if not os.path.isfile(file):
+        return None, None, f"file '{rel}' non trovato nel repo"
+    if os.path.getsize(file) > MAX_IMMAGINE:
+        return None, None, (f"file '{rel}' troppo grande "
+                            f"({os.path.getsize(file) // 1024} KB, massimo {MAX_IMMAGINE // 1024} KB)")
+    return rel, file, ""
+
+
+def _immagine(valore, cartella, base_url):
+    """(file locale o None, URL pubblico o ''). `valore` e' un URL https oppure un
+    percorso relativo al repo (es. 'locandine/corso.jpg'). Problemi -> (None, '')."""
+    v = str(valore or "").strip()
+    if not v:
+        return None, ""
+    rel, file, problema = _controlla_immagine(v, cartella)
+    if problema:
+        _avviso(f"immagine '{v}' ignorata ({problema}): l'avviso esce senza locandina")
+        return None, ""
+    if rel is None:                      # URL https
+        return None, v
+    url = f"{base_url.rstrip('/')}/{urllib.parse.quote(rel)}" if base_url else ""
+    return file, url
+
+
+def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI, base_url=""):
     """Corsi da annunciare oggi su `newsletter` ('pocus' o 'niv'), dal piu' vicino.
     Mai eccezioni: file mancante o rotto -> [] (con un avviso nel log)."""
     percorso = percorso or FILE_CORSI
@@ -99,6 +145,8 @@ def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI):
             if fine < oggi or (mostra_dal and oggi < mostra_dal):
                 continue
             iscr = _data(v.get("iscrizioni_fino"))
+            img_file, img_url = _immagine(v.get("immagine"), os.path.dirname(
+                os.path.abspath(percorso)), base_url)
             risultato.append({
                 "titolo": titolo, "inizio": inizio, "fine": fine,
                 "ora": _testo(v.get("ora"), 60),
@@ -106,6 +154,7 @@ def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI):
                 "descrizione": _testo(v.get("descrizione"), MAX_DESCRIZIONE),
                 "posti": _testo(v.get("posti"), 80),
                 "link": _url(v.get("link")),
+                "immagine_file": img_file, "immagine_url": img_url,
                 "iscrizioni_fino": iscr if iscr and iscr >= oggi else None,
             })
         except Exception as e:
@@ -136,8 +185,10 @@ def _esc(s):
     return html.escape(str(s), quote=True)
 
 
-def html_corsi(corsi, colore="#0a6e8a"):
-    """Riga <tr> per la mail, da inserire sotto l'intestazione. '' se non ci sono corsi."""
+def html_corsi(corsi, colore="#0a6e8a", anteprima_locale=False):
+    """Riga <tr> per la mail, da inserire sotto l'intestazione. '' se non ci sono corsi.
+    anteprima_locale=True (dry run): la locandina e' incorporata nell'HTML, cosi' si
+    vede anche prima che il file sia pubblicato su GitHub."""
     if not corsi:
         return ""
     etichetta = "Corso in programma" if len(corsi) == 1 else "Corsi in programma"
@@ -164,8 +215,21 @@ def html_corsi(corsi, colore="#0a6e8a"):
                    f'font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#ffffff;'
                    f'text-decoration:none;">Programma e iscrizioni</a></td></tr></table>'
                    if c["link"] else "")
+        src = c.get("immagine_url", "")
+        if anteprima_locale and c.get("immagine_file"):
+            tipo = mimetypes.guess_type(c["immagine_file"])[0] or "image/jpeg"
+            with open(c["immagine_file"], "rb") as f:
+                src = f"data:{tipo};base64," + base64.b64encode(f.read()).decode("ascii")
+        locandina = ""
+        if src:
+            img = (f'<img src="{_esc(src)}" alt="Locandina: {_esc(c["titolo"])}" width="480" '
+                   f'style="display:block;width:100%;max-width:480px;height:auto;border:0;'
+                   f'border-radius:4px;margin:0 auto;" />')
+            locandina = (f'<div style="margin:0 0 12px;">'
+                         + (f'<a href="{_esc(c["link"])}">{img}</a>' if c["link"] else img)
+                         + '</div>')
         schede += (f'<div style="margin:0 0 14px;padding-bottom:14px;'
-                   f'border-bottom:1px solid #e3ddd0;">'
+                   f'border-bottom:1px solid #e3ddd0;">{locandina}'
                    f'<div style="font-family:Georgia,serif;font-size:18px;font-weight:700;'
                    f'color:#1a1a1a;line-height:1.3;">{_esc(c["titolo"])}</div>'
                    f'<div style="font-family:Arial,sans-serif;font-size:13px;color:#444;'
@@ -178,29 +242,63 @@ def html_corsi(corsi, colore="#0a6e8a"):
             f'{schede}</td></tr>')
 
 
-def testo_telegram(corsi):
-    """Un solo messaggio (HTML di Telegram) con tutti i corsi, oppure ''."""
-    if not corsi:
-        return ""
-    blocchi = ["📣 <b>" + ("Corso in programma" if len(corsi) == 1 else "Corsi in programma")
-               + "</b>"]
-    for c in corsi:
-        riga = [f"\n<b>{_esc(c['titolo'])}</b>", f"📅 {_esc(data_leggibile(c))}"
-                + (f" · {_esc(c['ora'])}" if c["ora"] else "")]
-        if c["luogo"]:
-            riga.append(f"📍 {_esc(c['luogo'])}")
-        if c["posti"]:
-            riga.append(f"👥 {_esc(c['posti'])}")
-        if c["iscrizioni_fino"]:
-            riga.append(f"⏳ Iscrizioni entro il {_esc(_g(c['iscrizioni_fino']))} "
-                        f"{c['iscrizioni_fino'].year}")
-        if c["descrizione"]:
-            riga.append(f"\n{_esc(c['descrizione'])}")
-        if c["link"]:
-            riga.append(f'\n🔗 <a href="{_esc(c["link"])}">Programma e iscrizioni</a>')
-        blocchi.append("\n".join(riga))
-    testo = "\n".join(blocchi)
+def testo_telegram_corso(c):
+    """Messaggio (HTML di Telegram) per un corso."""
+    riga = ["📣 <b>Corso in programma</b>", "", f"<b>{_esc(c['titolo'])}</b>",
+            f"📅 {_esc(data_leggibile(c))}" + (f" · {_esc(c['ora'])}" if c["ora"] else "")]
+    if c["luogo"]:
+        riga.append(f"📍 {_esc(c['luogo'])}")
+    if c["posti"]:
+        riga.append(f"👥 {_esc(c['posti'])}")
+    if c["iscrizioni_fino"]:
+        riga.append(f"⏳ Iscrizioni entro il {_esc(_g(c['iscrizioni_fino']))} "
+                    f"{c['iscrizioni_fino'].year}")
+    if c["descrizione"]:
+        riga.append(f"\n{_esc(c['descrizione'])}")
+    if c["link"]:
+        riga.append(f'\n🔗 <a href="{_esc(c["link"])}">Programma e iscrizioni</a>')
+    testo = "\n".join(riga)
     return testo if len(testo) <= 4096 else testo[:4090] + "\n…"
+
+
+def telegram_photo(bot_token, chat_id, photo_url, caption=""):
+    """sendPhoto per URL (Telegram scarica l'immagine da solo). True/False, mai eccezioni."""
+    corpo = {"chat_id": chat_id, "photo": photo_url, "parse_mode": "HTML"}
+    if caption:
+        corpo["caption"] = caption
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+        data=json.dumps(corpo).encode("utf-8"),
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return bool(json.loads(r.read().decode("utf-8")).get("ok"))
+    except Exception as e:
+        log.warning(f"Telegram sendPhoto fallito: {e}")
+        return False
+
+
+def invia_telegram(bot_token, chat_id, corsi, send_message, send_photo=telegram_photo,
+                   pausa=1):
+    """Invia un messaggio per corso, con la locandina se c'e'. Restituisce (riusciti, totale).
+    Con locandina: foto con didascalia (max 1024 caratteri) oppure foto + testo. Se la
+    foto non parte (es. file non ancora pubblicato) si invia il solo testo."""
+    ok = 0
+    for c in corsi or []:
+        testo = testo_telegram_corso(c)
+        url = c.get("immagine_url")
+        inviato = False
+        if url:
+            if len(testo) <= CAPTION_TELEGRAM:
+                inviato = send_photo(bot_token, chat_id, url, testo)
+            elif send_photo(bot_token, chat_id, url, ""):
+                time.sleep(pausa)
+                inviato = send_message(testo)
+        if not inviato:
+            inviato = send_message(testo)
+        ok += 1 if inviato else 0
+        time.sleep(pausa)
+    return ok, len(corsi or [])
 
 
 def testo_facebook(c):
@@ -247,6 +345,10 @@ def verifica(percorso=None):
                 problemi.append(f"{nome}: '{campo}' deve essere AAAA-MM-GG")
         if not _data(v.get("data_inizio")):
             problemi.append(f"{nome}: manca 'data_inizio' valida")
+        _, _, problema = _controlla_immagine(
+            v.get("immagine"), os.path.dirname(os.path.abspath(percorso)))
+        if problema:
+            problemi.append(f"{nome}: 'immagine' {problema}")
         if v.get("link") and not _url(v.get("link")):
             problemi.append(f"{nome}: 'link' deve iniziare con https://")
         dove = v.get("newsletter")

@@ -10,7 +10,7 @@ def un_corso():
     return {"titolo": "Corso base di ecografia", "inizio": date(2026, 11, 14),
             "fine": date(2026, 11, 15), "ora": "9:00–17:00", "luogo": "Torino",
             "descrizione": "Parte pratica.", "posti": "", "link": "https://esempio.it/x",
-            "iscrizioni_fino": None}
+            "iscrizioni_fino": None, "immagine_file": None, "immagine_url": ""}
 
 
 def un_articolo():

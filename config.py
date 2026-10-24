@@ -201,6 +201,8 @@ COLOR_DARK          = "#1a2a1e"
 NEWSLETTER_PAGE_URL = "https://areacriticaprontosoccorso.github.io/Newsletter-NIV/"
 
 LOGO_URL = "https://raw.githubusercontent.com/areacriticaprontosoccorso/Newsletter-NIV/main/logo.png"
+# Base pubblica dei file del repo (locandine dei corsi): https://.../main/<percorso>
+URL_RAW_REPO = "https://raw.githubusercontent.com/areacriticaprontosoccorso/Newsletter-NIV/main/"
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "newsletter_niv.log")
 

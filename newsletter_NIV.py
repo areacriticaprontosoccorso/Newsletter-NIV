@@ -1067,7 +1067,7 @@ def build_html(articoli, stato, corsi=None):
     niv_str = " - ".join(_niv_nomi[:5])
     if len(_niv_nomi) > 5:
         niv_str += f" e altre {len(_niv_nomi) - 5}"
-    blocco_corsi = avvisi.html_corsi(corsi, cfg.COLOR_ACCENT)
+    blocco_corsi = avvisi.html_corsi(corsi, cfg.COLOR_ACCENT, anteprima_locale=cfg.DRY_RUN)
     nota = testo_nota(stato)
     disclaimer = (
         '<tr><td style="background:#fff8e1;padding:14px 32px;border-bottom:1px solid #f0e0a0;">'
@@ -1246,12 +1246,13 @@ def invia_telegram(articoli, stato, corsi=None):
     if telegram_send_message(bot_token, chat_id, build_tg_header(articoli, stato)):
         successi += 1
     time.sleep(1)
-    # Avviso corsi (se ce ne sono), subito dopo l'intestazione
-    msg_corsi = avvisi.testo_telegram(corsi)
-    if msg_corsi:
-        if telegram_send_message(bot_token, chat_id, msg_corsi):
-            successi += 1
-        time.sleep(1)
+    # Avviso corsi (se ce ne sono, con locandina), subito dopo l'intestazione
+    n_corsi = len(corsi or [])
+    if n_corsi:
+        ok_corsi, _ = avvisi.invia_telegram(
+            bot_token, chat_id, corsi,
+            lambda testo: telegram_send_message(bot_token, chat_id, testo))
+        successi += ok_corsi
     for i, a in enumerate(articoli, 1):
         msg = build_tg_articolo(i, a)
         if len(msg) > 4096:
@@ -1261,7 +1262,7 @@ def invia_telegram(articoli, stato, corsi=None):
         time.sleep(1)
     if telegram_send_message(bot_token, chat_id, build_tg_footer()):
         successi += 1
-    totale = len(articoli) + 2 + (1 if msg_corsi else 0)
+    totale = len(articoli) + 2 + n_corsi
     log.info(f"Telegram: inviati {successi}/{totale} messaggi al canale")
     return successi == totale
 
@@ -1330,7 +1331,7 @@ def _main():
     stato['n_niv'] = sum(a.get('origine') == 'niv' for a in selezionati)
     stato['n_em'] = len(selezionati) - stato['n_niv']
 
-    corsi = avvisi.carica_corsi("niv")
+    corsi = avvisi.carica_corsi("niv", base_url=cfg.URL_RAW_REPO)
     if corsi:
         log.info("Avvisi corsi: " + "; ".join(
             f"{c['titolo'][:50]} ({avvisi.data_leggibile(c)})" for c in corsi))
