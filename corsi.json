@@ -10,7 +10,8 @@
       "link": "https://ecm.unito.it/ecm",
       "immagine": "locandine/corso-niv-2027.jpg",
       "newsletter": ["niv"],
-      "ogni_settimane": 2
+      "ogni_settimane": 2,
+      "mostra_dal": "2026-11-02"
     },
     {
       "titolo": "Insufficienza respiratoria acuta: dalla CPAP alla ventilazione non invasiva – II edizione",
