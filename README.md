@@ -48,6 +48,7 @@ Si gestiscono dal file **`corsi.json`** (da GitHub: apri il file, matita, modifi
 - Obbligatori: `titolo` e `data_inizio` (formato `AAAA-MM-GG`). Tutto il resto e' facoltativo.
 - `data_fine`: per i corsi di piu' giorni. L'avviso resta fino all'ultimo giorno incluso, poi sparisce da solo.
 - `newsletter`: dove mostrarlo (`pocus`, `niv`); se manca, compare in entrambe.
+- `ogni_settimane`: frequenza dell'avviso (es. `2` = a settimane alterne; se manca, ogni settimana). L'ultima uscita prima del corso lo annuncia sempre; con `mostra_dal` le settimane si contano da quella data.
 - `mostra_dal`: non mostrarlo prima di quella data. `attivo: false`: sospende l'avviso senza cancellarlo.
 - Al massimo **2 corsi** per uscita, i piu' vicini nel tempo.
 - `immagine`: locandina del corso. Carica il file nella cartella `locandine/` (GitHub: *Add file > Upload files*) e scrivi `"immagine": "locandine/nome-file.jpg"`; in alternativa un URL `https://...`. Formati jpg, png, gif, massimo 5 MB (meglio sotto 1 MB). Compare in cima all'avviso nella mail (cliccabile se c'e' il `link`), come foto su Telegram. Se il file manca o e' troppo grande l'avviso esce senza locandina.
