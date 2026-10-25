@@ -200,7 +200,14 @@ COLOR_EM            = "#c41e3a"   # rosso EM Weekly Digest: articoli sostitutivi
 COLOR_DARK          = "#1a2a1e"
 NEWSLETTER_PAGE_URL = "https://areacriticaprontosoccorso.github.io/Newsletter-NIV/"
 
-LOGO_URL = "https://raw.githubusercontent.com/areacriticaprontosoccorso/Newsletter-NIV/main/logo.png"
+BASE_URL_LOGHI  = "https://raw.githubusercontent.com/areacriticaprontosoccorso/Newsletter-NIV/main/"
+# Loghi nell'intestazione della mail, affiancati da sinistra a destra.
+LOGHI = [
+    {"url": BASE_URL_LOGHI + "logo-medicina-urgenza.png",
+     "alt": "Medicina d'Emergenza-Urgenza - Pronto Soccorso e Area Critica, Ospedale San Giovanni Bosco"},
+]
+LOGO_ALTEZZA    = 100   # px
+LOGO_URL        = LOGHI[0]["url"]   # compatibilita'
 # Base pubblica dei file del repo (locandine dei corsi): https://.../main/<percorso>
 URL_RAW_REPO = "https://raw.githubusercontent.com/areacriticaprontosoccorso/Newsletter-NIV/main/"
 

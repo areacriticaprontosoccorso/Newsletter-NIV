@@ -1074,11 +1074,18 @@ def build_html(articoli, stato, corsi=None):
         '<p style="font-family:Georgia,serif;font-size:13px;color:#8a6d00;margin:0;line-height:1.5;">'
         f'<strong>Nota:</strong> {esc(nota)}</p></td></tr>'
     ) if nota else ''
+    loghi = [l for l in getattr(cfg, "LOGHI", []) if l.get("url")]
+    h = getattr(cfg, "LOGO_ALTEZZA", 100)
     logo_html = (
-        f'<img src="{cfg.LOGO_URL}" alt="Pronto Soccorso Area Critica" '
-        f'style="display:block;height:84px;width:auto;margin-bottom:14px;'
-        f'background:#ffffff;padding:6px 10px;border-radius:6px;" />'
-    ) if getattr(cfg, "LOGO_URL", "") else ""
+        '<table cellpadding="0" cellspacing="0" border="0" style="margin-bottom:14px;"><tr>'
+        '<td style="background:#ffffff;padding:6px 10px;border-radius:6px;">'
+        + "".join(
+            f'<img src="{esc(l["url"])}" alt="{esc(l.get("alt", ""))}" height="{h}" '
+            f'style="display:inline-block;height:{h}px;width:auto;border:0;vertical-align:middle;'
+            f'{"margin-left:16px;" if k else ""}" />'
+            for k, l in enumerate(loghi))
+        + '</td></tr></table>'
+    ) if loghi else ""
     return f'''<!DOCTYPE html>
 <html lang="it">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
