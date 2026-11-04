@@ -1019,7 +1019,7 @@ def _badge_html(origine):
             f'padding:2px 6px;border-radius:3px;">NIV</span> ')
 
 
-def build_html(articoli, stato, corsi=None):
+def build_html(articoli, stato):
     wl = numero_settimana()
     arts = ""
     for i, a in enumerate(articoli):
@@ -1067,7 +1067,6 @@ def build_html(articoli, stato, corsi=None):
     niv_str = " - ".join(_niv_nomi[:5])
     if len(_niv_nomi) > 5:
         niv_str += f" e altre {len(_niv_nomi) - 5}"
-    blocco_corsi = avvisi.html_corsi(corsi, cfg.COLOR_ACCENT, anteprima_locale=cfg.DRY_RUN)
     nota = testo_nota(stato)
     disclaimer = (
         '<tr><td style="background:#fff8e1;padding:14px 32px;border-bottom:1px solid #f0e0a0;">'
@@ -1128,7 +1127,6 @@ def build_html(articoli, stato, corsi=None):
           <span style="font-family:monospace;font-size:10px;color:#889;letter-spacing:1px;">NIV: {niv_str} + generaliste</span>
         </td>
       </tr>
-      {blocco_corsi}
       {disclaimer}
       <tr><td style="background:#ffffff;"><table width="100%" cellpadding="0" cellspacing="0">{arts}</table></td></tr>
       <tr>
@@ -1342,7 +1340,8 @@ def _main():
     if corsi:
         log.info("Avvisi corsi: " + "; ".join(
             f"{c['titolo'][:50]} ({avvisi.data_leggibile(c)})" for c in corsi))
-    html_body = build_html(selezionati, stato, corsi)
+    # Gli avvisi dei corsi (con locandina) vanno solo su Telegram, non nella mail.
+    html_body = build_html(selezionati, stato)
 
     if cfg.DRY_RUN:
         with open(cfg.DRY_RUN_FILE, "w", encoding="utf-8") as f:
