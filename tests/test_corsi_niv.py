@@ -25,14 +25,12 @@ STATO = {"n_niv": 1, "n_em": 0, "filtro_ko": False}
 
 
 class MailTest(unittest.TestCase):
-    def test_avviso_in_cima_prima_degli_articoli(self):
-        h = niv.build_html([un_articolo()], STATO, [un_corso()])
-        self.assertIn("Corso base di ecografia", h)
-        self.assertLess(h.index("Corso base di ecografia"), h.index("NIV study"))
-
-    def test_nessun_avviso_senza_corsi(self):
-        self.assertNotIn("Corso in programma", niv.build_html([un_articolo()], STATO))
-        self.assertNotIn("Corso in programma", niv.build_html([un_articolo()], STATO, []))
+    def test_la_mail_non_ha_avvisi_dei_corsi(self):
+        """Le locandine dei corsi vanno solo su Telegram, non nella mail."""
+        h = niv.build_html([un_articolo()], STATO)
+        self.assertNotIn("Corso in programma", h)
+        self.assertNotIn("Corso base di ecografia", h)
+        self.assertIn("NIV study", h)
 
 
 class TelegramTest(unittest.TestCase):

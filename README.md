@@ -20,7 +20,7 @@ articoli. Con `INTEGRA_CON_EM = False` il filtro e' solo NIV.
 ## Avvisi dei corsi
 
 I corsi organizzati da Francesco Panero compaiono ogni settimana, finche' non sono passati:
-in cima alla mail, in un messaggio Telegram subito dopo l'intestazione.
+solo in un messaggio Telegram, subito dopo l'intestazione (non nella mail).
 Si gestiscono dal file **`corsi.json`** (da GitHub: apri il file, matita, modifica,
 *Commit changes*). Nessuna modifica al codice.
 
