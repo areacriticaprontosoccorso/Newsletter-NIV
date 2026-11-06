@@ -238,3 +238,63 @@
 2026-11-04 22:05:36,168 [WARNING] Nessun articolo validato dai filtri NIV/EM
 2026-11-04 22:05:36,168 [INFO] Sintesi gruppo 'misto': 2 articoli in una chiamata
 2026-11-04 22:05:36,169 [INFO] Sintesi gruppo 'niv': 1 articoli in una chiamata
+2026-11-06 09:07:37,000 [WARNING] corsi.json non leggibile, nessun avviso corsi: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)
+2026-11-06 09:07:37,002 [INFO] 3 corsi in programma: ne annuncio i primi 2
+2026-11-06 09:07:37,002 [WARNING] voce 1 ignorata: servono 'titolo' e 'data_inizio' (AAAA-MM-GG)
+2026-11-06 09:07:37,002 [WARNING] voce 2 ignorata: servono 'titolo' e 'data_inizio' (AAAA-MM-GG)
+2026-11-06 09:07:37,003 [INFO] Corso 'Corso POCUS': non in questa settimana (ogni 2 settimane)
+2026-11-06 09:07:37,004 [INFO] Corso 'Corso POCUS': non in questa settimana (ogni 2 settimane)
+2026-11-06 09:07:37,004 [INFO] Corso 'Corso POCUS': non in questa settimana (ogni 2 settimane)
+2026-11-06 09:07:37,004 [INFO] Corso 'Corso POCUS': non in questa settimana (ogni 2 settimane)
+2026-11-06 09:07:37,005 [INFO] Corso 'Corso POCUS': non in questa settimana (ogni 2 settimane)
+2026-11-06 09:07:37,005 [WARNING] voce 1 (Corso POCUS): 'ogni_settimane' deve essere un numero da 1 a 8; uso 1 (ogni settimana)
+2026-11-06 09:07:37,009 [WARNING] immagine 'locandine/corso uno.png' ignorata (file 'locandine/corso uno.png' troppo grande (0 KB, massimo 0 KB)): l'avviso esce senza locandina
+2026-11-06 09:07:37,009 [WARNING] immagine 'locandine/non_esiste.png' ignorata (file 'locandine/non_esiste.png' non trovato nel repo): l'avviso esce senza locandina
+2026-11-06 09:07:37,009 [WARNING] immagine '../segreto.png' ignorata (deve essere un percorso nel repo (es. locandine/corso.jpg; formati jpg, png, gif) o un URL https): l'avviso esce senza locandina
+2026-11-06 09:07:37,010 [WARNING] immagine '/etc/passwd.png' ignorata (deve essere un percorso nel repo (es. locandine/corso.jpg; formati jpg, png, gif) o un URL https): l'avviso esce senza locandina
+2026-11-06 09:07:37,011 [WARNING] immagine 'locandine/corso uno.exe' ignorata (deve essere un percorso nel repo (es. locandine/corso.jpg; formati jpg, png, gif) o un URL https): l'avviso esce senza locandina
+2026-11-06 09:07:37,011 [WARNING] immagine 'javascript:alert(1)' ignorata (deve essere un percorso nel repo (es. locandine/corso.jpg; formati jpg, png, gif) o un URL https): l'avviso esce senza locandina
+2026-11-06 09:07:37,011 [WARNING] immagine 'ftp://a/b.png' ignorata (file 'ftp://a/b.png' non trovato nel repo): l'avviso esce senza locandina
+2026-11-06 09:07:37,015 [INFO] Telegram: inviati 4/4 messaggi al canale
+2026-11-06 09:07:37,016 [INFO] Telegram: inviati 3/3 messaggi al canale
+2026-11-06 09:07:37,017 [WARNING] JSON non valido (Expecting ',' delimiter, posizione 35 di 213): ...'[{"pmid": "1", "sintesi": "Soglie "adattive" in 300 pazienti.", "rilevanza": "ok", "limite": "ok", "tipo": "conferma"},\n {"pmid": "2", "sintesi": "Normale.", "rilevanza": "ok", "limite"'...
+2026-11-06 09:07:37,018 [WARNING]     recuperati 2 oggetti dalla risposta non valida
+2026-11-06 09:07:37,019 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,019 [ERROR] Filtro NIV+EM fallito (API non disponibile)
+2026-11-06 09:07:37,019 [ERROR] Filtro non eseguito: nessun articolo selezionato, invio da annullare
+2026-11-06 09:07:37,020 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,020 [INFO]     [NIV] 10000000 — tema 10000000 (non-invasiva) — pertinente
+2026-11-06 09:07:37,020 [INFO] Articoli NIV pertinenti: 1 (1 non invasiva, 0 collegata); sostitutivi EM: 0
+2026-11-06 09:07:37,020 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,020 [WARNING]     [NIV] PMID non tra i candidati, ignorato: '99999999'
+2026-11-06 09:07:37,020 [INFO] Articoli NIV pertinenti: 0 (0 non invasiva, 0 collegata); sostitutivi EM: 0
+2026-11-06 09:07:37,020 [WARNING] Nessun articolo validato dai filtri NIV/EM
+2026-11-06 09:07:37,020 [INFO] Filtro NIV stretto su 8 candidati -> max 5
+2026-11-06 09:07:37,020 [INFO]     [NIV] 10000000 — tema 10000000 (non-invasiva) — pertinente
+2026-11-06 09:07:37,020 [INFO] Articoli NIV pertinenti: 1 (1 non invasiva, 0 collegata)
+2026-11-06 09:07:37,021 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000000 — tema 10000000 (non-invasiva) — pertinente
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000001 — tema 10000001 (non-invasiva) — pertinente
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000002 — tema 10000002 (non-invasiva) — pertinente
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000003 — tema 10000003 (non-invasiva) — pertinente
+2026-11-06 09:07:37,021 [INFO]     [EM] 10000004 — tema 10000004 (non-invasiva) — pertinente
+2026-11-06 09:07:37,021 [INFO] Articoli NIV pertinenti: 4 (4 non invasiva, 0 collegata); sostitutivi EM: 1
+2026-11-06 09:07:37,021 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000000 — tema 10000000 (non-invasiva) — pertinente
+2026-11-06 09:07:37,021 [INFO]     [EM] 10000001 — tema 10000001 (non-invasiva) — pertinente
+2026-11-06 09:07:37,021 [INFO] Articoli NIV pertinenti: 1 (1 non invasiva, 0 collegata); sostitutivi EM: 1
+2026-11-06 09:07:37,021 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000000 — tema 10000000 (collegata) — pertinente
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000001 — tema 10000001 (collegata) — pertinente
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000002 in riserva: già 2 articoli di ventilazione invasiva collegata
+2026-11-06 09:07:37,021 [INFO]     [NIV] 10000003 in riserva: già 2 articoli di ventilazione invasiva collegata
+2026-11-06 09:07:37,022 [INFO] Articoli NIV pertinenti: 2 (0 non invasiva, 2 collegata); sostitutivi EM: 0
+2026-11-06 09:07:37,022 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,022 [INFO]     [NIV] 10000000 — tema 10000000 (non-invasiva) — pertinente
+2026-11-06 09:07:37,022 [INFO]     [EM] 10000001 — tema 10000001 (non-invasiva) — pertinente
+2026-11-06 09:07:37,022 [INFO] Articoli NIV pertinenti: 1 (1 non invasiva, 0 collegata); sostitutivi EM: 1
+2026-11-06 09:07:37,022 [INFO] Filtro NIV+EM (una chiamata) su 8 candidati -> max 5
+2026-11-06 09:07:37,022 [INFO] Articoli NIV pertinenti: 0 (0 non invasiva, 0 collegata); sostitutivi EM: 0
+2026-11-06 09:07:37,022 [WARNING] Nessun articolo validato dai filtri NIV/EM
+2026-11-06 09:07:37,022 [INFO] Sintesi gruppo 'misto': 2 articoli in una chiamata
+2026-11-06 09:07:37,022 [INFO] Sintesi gruppo 'niv': 1 articoli in una chiamata
