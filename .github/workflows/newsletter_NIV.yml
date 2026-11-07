@@ -61,6 +61,10 @@ jobs:
           pip install playwright==1.49.0
           playwright install --with-deps chromium
 
+      - name: Installa ffmpeg (Reel per Instagram)
+        continue-on-error: true
+        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
       - name: Verifica test offline
         run: python -m unittest discover -s tests -v
 
