@@ -230,6 +230,11 @@ IG_PAGE_TOKEN   = os.environ.get("IG_PAGE_TOKEN", "").strip()
 IG_DIR          = "instagram"
 IG_INTESTAZIONE = "NIV Weekly Digest — Settimana {settimana}/{anno}\nGli articoli più rilevanti sulla ventilazione non invasiva e sull'insufficienza respiratoria acuta."
 IG_CHIUSURA     = "Sintesi generate con supporto di intelligenza artificiale: verifica sempre la fonte originale. Iscrizione alla newsletter dal link in bio."
+# Reel: stesse diapositive del carosello, una dopo l'altra (IG_REEL_SCHEDE=False lo spegne). Senza
+# musica; se esiste il file IG_MUSICA (senza diritti d'autore: va controllata la licenza) viene
+# messo sotto le schede.
+IG_REEL_SCHEDE  = True
+IG_MUSICA       = "musica/sottofondo.mp3"
 IG_HASHTAG      = "#NIV #VentilazioneNonInvasiva #MedicinaDUrgenza #AreaCritica #ProntoSoccorso #FOAMed"
 
 # Base pubblica dei file del repo (locandine dei corsi): https://.../main/<percorso>
