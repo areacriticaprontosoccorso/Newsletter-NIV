@@ -13,6 +13,9 @@ e per il badge in email e Telegram.
 
 import os
 import re
+import shutil
+import tempfile
+import pathlib
 import json
 import time
 import html
@@ -28,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 
 import config as cfg
 import corsi as avvisi
+import instagram
 from quality import controlla_sintesi, salva_report
 
 TUTTE_RIVISTE = [r for r in cfg.RIVISTE_NIV + cfg.RIVISTE
@@ -1019,6 +1023,108 @@ def _badge_html(origine):
             f'padding:2px 6px;border-radius:3px;">NIV</span> ')
 
 
+def build_html_scheda(a, indice, wl):
+    """Pagina HTML autonoma con un solo articolo, pensata per lo screenshot (Instagram).
+    Come in POCUS ed EM: niente abstract originale, la scheda resta di altezza leggibile."""
+    colore = cfg.COLOR_EM if a.get("origine") == "em" else cfg.COLOR_ACCENT
+    rel = (f'<br/><br/><strong style="color:{colore};">{esc(a["rilevanza"])}</strong>'
+           if a.get("rilevanza") else "")
+    sintesi = (f'<div style="background:#f4f8f4;border-left:3px solid {colore};padding:16px 20px;'
+               f'font-family:Georgia,serif;font-size:15.5px;color:#2a2a2a;line-height:1.65;'
+               f'margin-bottom:18px;">{esc(a["sintesi_it"])}{rel}</div>') if a.get("sintesi_it") else ""
+    doi = f' &nbsp;&middot;&nbsp; DOI {esc(a["doi"])}' if a.get("doi") else ""
+    return f"""<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#ffffff;width:{cfg.IMG_LARGHEZZA}px;">
+  <div style="background:{cfg.COLOR_ACCENT};height:5px;"></div>
+  <div style="background:{cfg.COLOR_DARK};padding:16px 34px;">
+    <div style="font-family:monospace;font-size:10px;color:#8a8a8a;letter-spacing:3px;
+                text-transform:uppercase;">{esc(cfg.NOME_SERVIZIO)}</div>
+    <div style="font-family:monospace;font-size:11px;color:#cfcfcf;letter-spacing:1px;margin-top:6px;">
+      {esc(cfg.NOME_NEWSLETTER)} &middot; Settimana {esc(wl['settimana'])}/{esc(wl['anno'])}
+    </div>
+  </div>
+  <div style="padding:26px 34px 30px;">
+    <div style="margin-bottom:14px;">
+      <span style="font-family:monospace;font-size:15px;color:{colore};font-weight:700;">{str(indice).zfill(2)}</span>
+      {_badge_html(a.get("origine"))}
+      <span style="font-family:monospace;font-size:12px;color:#aaa;">{esc(a['rivista'])} &middot; {esc(a['data'])}</span>{_badge_tipo_html(a.get("tipo"))}
+    </div>
+    <div style="font-family:Georgia,serif;font-size:23px;font-weight:700;color:#1a1a1a;
+                line-height:1.32;margin-bottom:8px;">{esc(a['titolo'])}</div>
+    <div style="font-family:monospace;font-size:12.5px;color:#999;font-style:italic;
+                margin-bottom:20px;">{esc(a['autori'])}</div>
+    {sintesi}
+    {_limite_html(a.get("limite"))}
+    <div style="font-family:monospace;font-size:11px;color:#0a4d68;border-top:1px solid #dde8dd;
+                padding-top:12px;">PubMed {esc(a['pmid'])}{doi}</div>
+  </div>
+</body></html>"""
+
+
+def genera_immagini(articoli):
+    """Una scheda PNG per articolo, con Chromium headless via Playwright (come POCUS ed EM).
+    Mai bloccante: se qualcosa fallisce si prosegue con le schede gia' pronte."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        log.error("Playwright non installato: nessuna scheda generata")
+        return []
+    wl = numero_settimana()
+    os.makedirs(cfg.IMG_DIR, exist_ok=True)
+    tmp = tempfile.mkdtemp()
+    percorsi = []
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(args=["--no-sandbox"])
+            # Viewport basso di partenza: lo screenshot full_page prende il massimo fra
+            # contenuto e viewport; poi lo si adatta all'altezza reale della scheda.
+            pagina = browser.new_page(viewport={"width": cfg.IMG_LARGHEZZA, "height": 200},
+                                      device_scale_factor=cfg.IMG_SCALA)
+            for i, a in enumerate(articoli, 1):
+                f = os.path.join(tmp, f"scheda{i}.html")
+                with open(f, "w", encoding="utf-8") as fh:
+                    fh.write(build_html_scheda(a, i, wl))
+                pagina.goto(pathlib.Path(f).as_uri(), wait_until="networkidle",
+                            timeout=cfg.IMG_TIMEOUT_MS)
+                altezza = max(int(pagina.evaluate("Math.ceil(document.documentElement.scrollHeight)")), 200)
+                pagina.set_viewport_size({"width": cfg.IMG_LARGHEZZA, "height": altezza})
+                dest = os.path.join(cfg.IMG_DIR, f"niv-s{str(wl['settimana']).zfill(2)}-{str(i).zfill(2)}.png")
+                pagina.screenshot(path=dest, full_page=True)
+                percorsi.append(dest)
+            browser.close()
+    except Exception as e:
+        log.error(f"Generazione schede interrotta: {e}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    log.info(f"Schede generate: {len(percorsi)}/{len(articoli)}")
+    return percorsi
+
+
+def pubblica_instagram(articoli, wl, dry_run=False):
+    """Carosello Instagram: schede degli articoli e locandina del corso NIV (ogni venerdi',
+    a prescindere dalla frequenza di Telegram). Mai bloccante. Le schede si generano solo se
+    serve: in prova a vuoto, o con Instagram configurato."""
+    try:
+        if not getattr(cfg, "IG_ABILITATO", True):
+            return None
+        if not dry_run and not (cfg.IG_USER_ID and cfg.FB_PAGE_ID and cfg.FB_PAGE_TOKEN):
+            log.info("Instagram: non configurato (IG_USER_ID / FB_PAGE_ID / FB_PAGE_TOKEN) - salto")
+            return None
+        immagini = genera_immagini(articoli)
+        corsi_ig = avvisi.carica_corsi("niv", base_url=cfg.URL_RAW_REPO,
+                                       ignora_frequenza=True, massimo=2)
+        voci = instagram.assembla(None, immagini, corsi_ig)
+        didascalia = instagram.componi_didascalia(
+            cfg.IG_INTESTAZIONE.format(settimana=wl["settimana"], anno=wl["anno"]),
+            [a.get("titolo_it") or a["titolo"] for a in articoli], corsi_ig,
+            cfg.IG_CHIUSURA, cfg.IG_HASHTAG, data_leggibile=avvisi.data_leggibile)
+        return instagram.pubblica(voci, didascalia, cfg, dry_run=dry_run)
+    except Exception as e:
+        log.error(f"Instagram non pubblicato: {e}")
+        return None
+
+
 def build_html(articoli, stato):
     wl = numero_settimana()
     arts = ""
@@ -1360,6 +1466,7 @@ def _main():
             log.info(f"      badge: {a.get('tipo') or 'nessuno'}")
             log.info(f"      rilevanza: {(a.get('rilevanza') or '')[:160]}")
             log.info(f"      limite: {(a.get('limite') or '')[:160]}")
+        pubblica_instagram(selezionati, wl, dry_run=True)
         log.info("=== OK (dry run) ===")
         return True
 
@@ -1368,6 +1475,7 @@ def _main():
         html_body, destinatari,
     )
     ok_telegram = invia_telegram(selezionati, stato, corsi)
+    pubblica_instagram(selezionati, wl)
 
     log.info("=== Email: OK ===" if ok_email else "=== Email: FALLITO ===")
     log.info("=== Telegram: OK ===" if ok_telegram else "=== Telegram: FALLITO o non configurato ===")
