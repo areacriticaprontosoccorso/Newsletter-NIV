@@ -225,6 +225,8 @@ FB_PAGE_TOKEN  = os.environ.get("FB_PAGE_TOKEN", "")
 # FB_PAGE_ID / FB_PAGE_TOKEN; senza, non fa nulla. IG_ABILITATO=0 lo spegne.
 IG_ABILITATO    = os.environ.get("IG_ABILITATO", "1").strip().lower() not in ("0", "false", "no")
 IG_USER_ID      = os.environ.get("IG_USER_ID", "").strip()
+# Token della Pagina usato solo da Instagram: se manca si usa FB_PAGE_TOKEN (che resta dei post Facebook).
+IG_PAGE_TOKEN   = os.environ.get("IG_PAGE_TOKEN", "").strip()
 IG_DIR          = "instagram"
 IG_INTESTAZIONE = "NIV Weekly Digest — Settimana {settimana}/{anno}\nGli articoli più rilevanti sulla ventilazione non invasiva e sull'insufficienza respiratoria acuta."
 IG_CHIUSURA     = "Sintesi generate con supporto di intelligenza artificiale: verifica sempre la fonte originale. Iscrizione alla newsletter dal link in bio."
