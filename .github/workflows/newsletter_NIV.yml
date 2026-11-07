@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'corsi.py'
+      - 'instagram.py'
       - 'corsi.json'
       - 'corsi.esempio.json'
       - 'newsletter_NIV.py'
@@ -52,8 +53,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Nessuna dipendenza esterna: lo script usa solo la libreria standard
-      # (invio via SMTP con smtplib).
+      # L'invio usa solo la libreria standard (SMTP con smtplib). Playwright serve solo alle
+      # schede delle immagini per Instagram: non bloccante, senza si pubblica senza schede.
+      - name: Installa Chromium (schede per Instagram)
+        continue-on-error: true
+        run: |
+          pip install playwright==1.49.0
+          playwright install --with-deps chromium
 
       - name: Verifica test offline
         run: python -m unittest discover -s tests -v
@@ -72,6 +78,11 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Instagram (carosello): senza IG_USER_ID non si pubblica. Le foto delle diapositive
+          # passano dalla Pagina Facebook (stessi secret di EM e POCUS).
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: python newsletter_NIV.py
 
       # Caricato anche quando lo step precedente fallisce: il log e' proprio
@@ -84,5 +95,7 @@ jobs:
           path: |
             anteprima_digest.html
             newsletter_niv.log
+            immagini/
+            instagram/
           if-no-files-found: warn
           retention-days: 30

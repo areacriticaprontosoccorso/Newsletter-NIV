@@ -54,3 +54,20 @@ Si gestiscono dal file **`corsi.json`** (da GitHub: apri il file, matita, modifi
 - `immagine`: locandina del corso. Carica il file nella cartella `locandine/` (GitHub: *Add file > Upload files*) e scrivi `"immagine": "locandine/nome-file.jpg"`; in alternativa un URL `https://...`. Formati jpg, png, gif, massimo 5 MB (meglio sotto 1 MB). Compare in cima all'avviso nella mail (cliccabile se c'e' il `link`), come foto su Telegram. Se il file manca o e' troppo grande l'avviso esce senza locandina.
 - Un esempio completo e' in `corsi.esempio.json`.
 - Se il file ha un errore, la newsletter parte lo stesso senza avvisi e il run di GitHub Actions mostra un avviso giallo ("Controlla corsi.json"). `python corsi.py` lo controlla in locale.
+
+## Instagram
+
+Il venerdì, dopo la mail, esce su Instagram **un carosello** con le schede degli articoli e la locandina del corso NIV. Le diapositive sono
+JPEG 4:5 (1080x1350): le schede e le locandine stanno intere, con bande bianche ai lati. Nel testo
+ci sono l'elenco degli articoli, i corsi in programma e `www.ecm.unito.it`; la didascalia rispetta i
+limiti di Instagram (2200 caratteri, 30 hashtag). La locandina esce ogni settimana, a prescindere
+dalla frequenza dell'avviso su Telegram e in mail.
+
+Serve un account Instagram **Business o Creator collegato alla Pagina Facebook**, e tre secret del repo:
+`FB_PAGE_ID`, `FB_PAGE_TOKEN` (il token deve avere i permessi `instagram_basic`,
+`instagram_content_publish` e `pages_read_engagement`) e `IG_USER_ID` (l'ID dell'account Instagram).
+Senza `IG_USER_ID` non succede nulla; `IG_ABILITATO=0` lo spegne. Le diapositive passano dalla Pagina
+come foto **non pubblicate** (Instagram scarica da lì l'indirizzo pubblico): nulla compare su Facebook.
+Un errore Instagram non blocca mai l'invio. Con `dry_run` non si chiama nessuna API: le diapositive e
+la didascalia finiscono nell'artefatto del run (cartella `instagram/`). Il codice sta in `instagram.py`.
+

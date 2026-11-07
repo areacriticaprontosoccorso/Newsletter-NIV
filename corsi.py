@@ -2,7 +2,7 @@
 
 I corsi stanno in corsi.json (stesso formato in ogni repo, vedi README). A ogni
 uscita compaiono i corsi non ancora conclusi, in cima alla mail, in un messaggio
-Telegram e (solo POCUS) in un post Facebook programmato. Passata la data del
+Telegram e (POCUS ed EM) in un post Facebook programmato. Passata la data del
 corso l'avviso sparisce da solo.
 
 Solo libreria standard. Un errore in questo modulo NON deve mai bloccare la
@@ -108,14 +108,29 @@ def _immagine(valore, cartella, base_url):
     return file, url
 
 
-def _settimana_di_uscita(oggi, inizio, mostra_dal, ogni):
+def _settimana_di_uscita(oggi, inizio, mostra_dal, ogni, turno=None):
     """True se in questa settimana il corso va annunciato, con frequenza `ogni`
-    settimane. L'ultima uscita prima del corso (7 giorni prima o meno) lo annuncia sempre."""
+    settimane. L'ultima uscita prima del corso (7 giorni prima o meno) lo annuncia sempre.
+    Con `turno` (0..ogni-1) le settimane si contano da una data fissa (lunedi' 5/1/2026),
+    cosi' due corsi con turni diversi si alternano e non si incontrano mai."""
     if ogni <= 1 or 0 <= (inizio - oggi).days <= 7:
         return True
-    rif = mostra_dal or LUNEDI_RIFERIMENTO
     lunedi = lambda d: d - timedelta(days=d.weekday())
+    if turno is not None:
+        return ((lunedi(oggi) - lunedi(LUNEDI_RIFERIMENTO)).days // 7) % ogni == turno
+    rif = mostra_dal or LUNEDI_RIFERIMENTO
     return ((lunedi(oggi) - lunedi(rif)).days // 7) % ogni == 0
+
+
+def _turno(valore, ogni):
+    """Turno di alternanza (0..ogni-1); None se manca, False se non valido."""
+    if valore in (None, ""):
+        return None
+    try:
+        n = int(valore)
+    except (TypeError, ValueError):
+        return False
+    return n if 0 <= n < ogni and str(valore).strip() == str(n) else False
 
 
 def _ogni(valore):
@@ -129,8 +144,11 @@ def _ogni(valore):
     return n if 1 <= n <= 8 and str(valore).strip() == str(n) else None
 
 
-def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI, base_url=""):
-    """Corsi da annunciare oggi su `newsletter` ('pocus' o 'niv'), dal piu' vicino.
+def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI, base_url="",
+                 ignora_frequenza=False):
+    """Corsi da annunciare oggi su `newsletter` ('pocus', 'niv' o 'em'), dal piu' vicino.
+    Con `ignora_frequenza` si hanno tutti i corsi in corso di pubblicazione, a prescindere
+    da `ogni_settimane` e `turno` (serve al video del podcast).
     Mai eccezioni: file mancante o rotto -> [] (con un avviso nel log)."""
     percorso = percorso or FILE_CORSI
     oggi = oggi or oggi_roma()
@@ -173,7 +191,13 @@ def carica_corsi(newsletter, oggi=None, percorso=None, massimo=MAX_CORSI, base_u
                 _avviso(f"voce {i} ({titolo}): 'ogni_settimane' deve essere un numero da 1 a 8; "
                         "uso 1 (ogni settimana)")
                 ogni = 1
-            if not _settimana_di_uscita(oggi, inizio, mostra_dal, ogni):
+            turno = _turno(v.get("turno"), ogni)
+            if turno is False:
+                _avviso(f"voce {i} ({titolo}): 'turno' deve essere un numero da 0 a {ogni - 1}; "
+                        "lo ignoro")
+                turno = None
+            if not ignora_frequenza and not _settimana_di_uscita(
+                    oggi, inizio, mostra_dal, ogni, turno):
                 log.info(f"Corso '{titolo[:50]}': non in questa settimana (ogni {ogni} settimane)")
                 continue
             iscr = _data(v.get("iscrizioni_fino"))
@@ -381,15 +405,19 @@ def verifica(percorso=None):
             v.get("immagine"), os.path.dirname(os.path.abspath(percorso)))
         if problema:
             problemi.append(f"{nome}: 'immagine' {problema}")
-        if _ogni(v.get("ogni_settimane")) is None:
+        ogni = _ogni(v.get("ogni_settimane"))
+        if ogni is None:
             problemi.append(f"{nome}: 'ogni_settimane' deve essere un numero da 1 a 8")
+        elif _turno(v.get("turno"), ogni) is False:
+            problemi.append(f"{nome}: 'turno' deve essere un numero da 0 a {ogni - 1} "
+                            "(0 = prima settimana del ciclo, 1 = seconda...)")
         if v.get("link") and not _url(v.get("link")):
             problemi.append(f"{nome}: 'link' deve iniziare con https://")
         dove = v.get("newsletter")
         if dove is not None:
             for x in ([dove] if isinstance(dove, str) else list(dove)):
-                if x not in ("pocus", "niv"):
-                    problemi.append(f"{nome}: newsletter '{x}' sconosciuta (usa pocus, niv)")
+                if x not in ("pocus", "niv", "em"):
+                    problemi.append(f"{nome}: newsletter '{x}' sconosciuta (usa pocus, niv, em)")
     return problemi
 
 
@@ -399,7 +427,7 @@ if __name__ == "__main__":
     for p in probl:
         print(f"::warning title=corsi.json::{p}")
         print(f"PROBLEMA: {p}")
-    for nl in ("pocus", "niv"):
+    for nl in ("pocus", "niv", "em"):
         c = carica_corsi(nl)
         print(f"{nl}: {len(c)} corsi da annunciare oggi" + "".join(
             f"\n  - {x['titolo']} ({data_leggibile(x)})" for x in c))
