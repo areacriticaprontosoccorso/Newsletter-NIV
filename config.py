@@ -235,6 +235,8 @@ IG_CHIUSURA     = "Sintesi generate con supporto di intelligenza artificiale: ve
 # messo sotto le schede.
 IG_REEL_SCHEDE  = True
 IG_MUSICA       = "musica/sottofondo.mp3"
+# Diapositiva con i tre loghi: sempre l'ultima del carosello e dei Reel (se il file esiste).
+IG_LOGHI        = "loghi/chiusura.png"
 IG_HASHTAG      = "#NIV #VentilazioneNonInvasiva #MedicinaDUrgenza #AreaCritica #ProntoSoccorso #FOAMed"
 
 # Base pubblica dei file del repo (locandine dei corsi): https://.../main/<percorso>
