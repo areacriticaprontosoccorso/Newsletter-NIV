@@ -1040,7 +1040,8 @@ def pubblica_instagram(articoli, wl, dry_run=False):
                                        ignora_frequenza=True, massimo=2)
         voci = instagram.assembla(None, schede, corsi_ig, getattr(cfg, "IG_LOGHI", None))
         didascalia = instagram.componi_didascalia(
-            cfg.IG_INTESTAZIONE.format(settimana=wl["settimana"], anno=wl["anno"]),
+            (cfg.IG_PREFISSO_PROVA if cfg.SOLO_INSTAGRAM else "")
+            + cfg.IG_INTESTAZIONE.format(settimana=wl["settimana"], anno=wl["anno"]),
             [a.get("titolo_it") or a["titolo"] for a in articoli], corsi_ig,
             cfg.IG_CHIUSURA, cfg.IG_HASHTAG, data_leggibile=avvisi.data_leggibile)
         return instagram.pubblica(voci, didascalia, cfg, dry_run=dry_run, parole=parole)
@@ -1393,6 +1394,13 @@ def _main():
         pubblica_instagram(selezionati, wl, dry_run=True)
         log.info("=== OK (dry run) ===")
         return True
+
+    if cfg.SOLO_INSTAGRAM:
+        log.warning("=== MODALITA' SOLO INSTAGRAM (prova): nessuna email o Telegram ===")
+        post = pubblica_instagram(selezionati, wl)
+        log.info("=== Instagram: carosello OK ===" if post else
+                 "=== Instagram: carosello NON pubblicato (vedi le righe 'Instagram:') ===")
+        return bool(post)
 
     ok_email = invia_email(
         f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}",

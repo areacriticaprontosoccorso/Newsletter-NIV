@@ -80,6 +80,8 @@ Il Reel si carica con l'upload «resumable» dell'API (`rupload.facebook.com`), 
 Non è stato provato con l'API reale (nei test è simulata): se il primo Reel non esce, nel log cerca
 «Instagram: Reel non pubblicato».
 
+**Prova dell'invio su Instagram.** Per provare solo Instagram, senza mail, Telegram o Facebook: Actions → il workflow → *Run workflow* → spunta **solo_instagram** (e lascia spenti gli altri). Il run fa la selezione e la sintesi come una corsa vera, poi pubblica davvero su Instagram il carosello e il Reel, con «[PROVA - da cancellare]» in testa alla didascalia: i post vanno cancellati a mano dall'app. Serve che `IG_USER_ID`, `IG_PAGE_TOKEN` e `FB_PAGE_ID` siano nei secret. Il run risulta riuscito se il carosello è uscito; se il Reel non esce, nel log compare «Instagram: Reel non pubblicato». Variabile: `SOLO_INSTAGRAM`.
+
 Serve un account Instagram **Business o Creator collegato alla Pagina Facebook**, e tre secret del repo:
 `FB_PAGE_ID`, `FB_PAGE_TOKEN` (il token deve avere i permessi `instagram_basic`,
 `instagram_content_publish` e `pages_read_engagement`) e `IG_USER_ID` (l'ID dell'account Instagram).

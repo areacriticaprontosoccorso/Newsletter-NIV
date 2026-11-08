@@ -18,6 +18,10 @@ on:
         description: "Prova a vuoto: esegue tutto ma NON invia email ne' Telegram"
         type: boolean
         default: false
+      solo_instagram:
+        description: "Prova Instagram: pubblica SOLO su Instagram (carosello e Reel veri, con [PROVA] in didascalia), niente email o Telegram"
+        type: boolean
+        default: false
 
 # Evita doppi invii se cron-job.org spara due trigger ravvicinati:
 # il secondo run attende (non cancella) ma non gira in parallelo.
@@ -80,6 +84,7 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           # Vuoto quando il workflow parte da cron-job.org: l'invio resta il default.
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          SOLO_INSTAGRAM: ${{ inputs.solo_instagram && '1' || '' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           # Instagram (carosello): senza IG_USER_ID non si pubblica. Le foto delle diapositive

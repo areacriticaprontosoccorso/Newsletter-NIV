@@ -21,6 +21,11 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 # ma NON invia né email né Telegram; scrive l'HTML su file e logga la selezione.
 DRY_RUN      = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes", "si")
 DRY_RUN_FILE = "anteprima_digest.html"
+# Prova dell'invio su Instagram: stessa selezione e sintesi di una corsa vera, ma pubblica SOLO su
+# Instagram (carosello e Reel veri, con "[PROVA]" in testa alla didascalia): niente mail o Telegram.
+# Attivazione: SOLO_INSTAGRAM=1. Ha effetto solo se DRY_RUN non e' attivo.
+SOLO_INSTAGRAM = os.environ.get("SOLO_INSTAGRAM", "").strip().lower() in ("1", "true", "yes", "si")
+IG_PREFISSO_PROVA = "[PROVA - da cancellare] "
 NCBI_TOOL          = "niv_weekly_digest_torino"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -700,8 +705,8 @@ traduzione medico-scientifica dall'inglese all'italiano.
 def valida_config():
     mancanti = []
     if not ANTHROPIC_API_KEY: mancanti.append("ANTHROPIC_API_KEY")
-    # In prova a vuoto non si invia nulla: le credenziali SMTP non servono.
-    if not DRY_RUN:
+    # In prova a vuoto o su Instagram non si invia nulla: le credenziali SMTP non servono.
+    if not DRY_RUN and not SOLO_INSTAGRAM:
         if not GMAIL_USER:         mancanti.append("GMAIL_USER")
         if not GMAIL_APP_PASSWORD: mancanti.append("GMAIL_APP_PASSWORD")
     if mancanti:
