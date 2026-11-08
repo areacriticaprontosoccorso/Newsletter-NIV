@@ -1038,7 +1038,10 @@ def pubblica_instagram(articoli, wl, dry_run=False):
                                                  os.path.join(cfg.IG_DIR, "schede"))
         corsi_ig = avvisi.carica_corsi("niv", base_url=cfg.URL_RAW_REPO,
                                        ignora_frequenza=True, massimo=2)
-        voci = instagram.assembla(None, schede, corsi_ig, getattr(cfg, "IG_LOGHI", None))
+        copertina = instagram.genera_copertina_iscrizione(
+            cfg, os.path.join(cfg.IG_DIR, "schede", "copertina-iscrizione.png"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"))
+        voci = instagram.assembla(copertina, schede, corsi_ig, getattr(cfg, "IG_LOGHI", None))
         didascalia = instagram.componi_didascalia(
             (cfg.IG_PREFISSO_PROVA if cfg.SOLO_INSTAGRAM else "")
             + cfg.IG_INTESTAZIONE.format(settimana=wl["settimana"], anno=wl["anno"]),
