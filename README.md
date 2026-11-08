@@ -68,6 +68,8 @@ numero, tipo di studio, rivista e data, titolo (in italiano) e il riquadro «Per
 in mancanza, la prima frase della sintesi), con il PubMed ID. I caratteri si adattano da soli alla
 lunghezza del titolo. Il codice è `instagram.py` (`dati_scheda`, `html_scheda`, `genera_schede`).
 
+**Prima diapositiva: la pagina di iscrizione.** Il carosello e il Reel aprono con una diapositiva fatta di titolo di presentazione, schermata di `index.html` (la pagina di iscrizione, ripresa dal repo: è la stessa che pubblica GitHub Pages) in una finestra di browser con l'indirizzo vero, e l'invito «Iscriviti alla newsletter · link in bio». Nel Reel dura 4 s. Titolo, sottotitolo e invito si cambiano in `config.py` (`IG_COPERTINA_TITOLO`, `IG_COPERTINA_SOTTOTITOLO`, `IG_COPERTINA_INVITO`); `IG_COPERTINA_ISCRIZIONE = False` la toglie. Se la schermata non si genera, il carosello esce senza (nel log: «prima immagine non generata»). Il codice è `genera_copertina_iscrizione` in `instagram.py`.
+
 **Loghi in chiusura.** L'ultima diapositiva del carosello e l'ultima dei Reel (3 s; anche in coda all'estratto del podcast, in EM) è sempre `loghi/chiusura.png`, con i tre loghi (Medicina d'Emergenza-Urgenza, Pronto Soccorso Area Critica, Emergency Ultrasound School Turin). Per cambiarla basta sostituire il file (1080x1350); `IG_LOGHI` in `config.py` ne indica il percorso.
 
 **Reel delle schede.** Subito dopo il carosello esce un Reel 9:16 con le stesse diapositive, una dopo
