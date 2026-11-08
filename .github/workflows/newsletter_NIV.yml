@@ -6,6 +6,7 @@ on:
       - 'corsi.py'
       - 'instagram.py'
       - 'avviso.py'
+      - 'x_social.py'
       - 'corsi.json'
       - 'corsi.esempio.json'
       - 'newsletter_NIV.py'
@@ -99,6 +100,11 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_PAGE_TOKEN: ${{ secrets.IG_PAGE_TOKEN }}
+          # X (ex Twitter): post con il Reel; senza queste chiavi X viene saltato
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
         run: python newsletter_NIV.py
 
       # Caricato anche quando lo step precedente fallisce: il log e' proprio
