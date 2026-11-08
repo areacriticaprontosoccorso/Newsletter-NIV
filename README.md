@@ -55,6 +55,12 @@ Si gestiscono dal file **`corsi.json`** (da GitHub: apri il file, matita, modifi
 - Un esempio completo e' in `corsi.esempio.json`.
 - Se il file ha un errore, la newsletter parte lo stesso senza avvisi e il run di GitHub Actions mostra un avviso giallo ("Controlla corsi.json"). `python corsi.py` lo controlla in locale.
 
+## Avvisi per email (errori e invii incompleti)
+
+Alla fine di ogni run (`avviso.py`, ultimo passo del workflow) il log del run viene letto e, **solo se qualcosa è andato storto**, parte un'email a `AVVISI_EMAIL`. Se va tutto bene non arriva nulla. Conta come problema: il job fallito, le righe `ERROR` del log, e le righe `WARNING` che dicono che qualcosa non è uscito («non pubblicato», «fallito», «non programmato»...). I tentativi ripetuti («tentativo 1/3») non contano. Nell'email: le righe da guardare (senza token né indirizzi) e il link al run.
+
+Serve il secret `AVVISI_EMAIL` (l'indirizzo che riceve gli avvisi; senza, l'avviso va all'indirizzo mittente della newsletter). Non partono nelle prove (`dry_run`, `solo_*`). Un avviso che non riesce a partire non fa mai fallire il run. `avviso.py` è una copia identica nei tre repo (EM, POCUS, NIV): se lo modifichi, modificalo in tutti e tre.
+
 ## Instagram
 
 Il venerdì, dopo la mail, esce su Instagram **un carosello** con le schede degli articoli e la locandina del corso NIV. Le diapositive sono

@@ -5,6 +5,7 @@ on:
     paths:
       - 'corsi.py'
       - 'instagram.py'
+      - 'avviso.py'
       - 'corsi.json'
       - 'corsi.esempio.json'
       - 'newsletter_NIV.py'
@@ -77,6 +78,11 @@ jobs:
         continue-on-error: true
         run: python corsi.py
 
+      # Segna l'ora d'inizio (UTC): l'avviso per email legge dal log solo le righe di
+      # questo run, non quelle dei test che scrivono nello stesso file.
+      - name: Segna l'inizio della newsletter
+        run: echo "NEWSLETTER_INIZIO=$(date -u '+%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
+
       - name: Esegui newsletter NIV
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -109,3 +115,15 @@ jobs:
             instagram/
           if-no-files-found: warn
           retention-days: 30
+
+      # Email a AVVISI_EMAIL solo se un invio e' fallito o e' uscito incompleto (errori nel log
+      # del run). Se va tutto bene non scrive. Mai bloccante. Non parte nelle prove.
+      - name: Avvisa per email se qualcosa e' andato storto
+        if: always() && !inputs.dry_run && !inputs.solo_instagram
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          AVVISI_EMAIL: ${{ secrets.AVVISI_EMAIL }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python avviso.py
