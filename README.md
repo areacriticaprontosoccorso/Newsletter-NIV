@@ -82,6 +82,17 @@ lunghezza del titolo. Il codice è `instagram.py` (`dati_scheda`, `html_scheda`,
 
 **Musica.** Il Reel delle schede ha la musica se nel repo c'è `musica/sottofondo.mp3` (`IG_MUSICA`); allora in fondo alla didascalia del Reel va il credito `IG_MUSICA_CREDITO` (licenza CC BY: l'autore va citato). Senza il file il Reel resta muto e senza credito.
 
+## Podcast (allegato alla mail)
+
+Ogni venerdì, prima della mail, si genera il podcast della settimana: una voce, circa due minuti, come quello di EM Weekly Digest. Parte **allegato alla mail degli iscritti** come video MP4 (copertina, le schede degli articoli che scorrono mentre se ne parla, sottotitoli; in coda la locandina del corso NIV con l'invito a voce e i loghi), o come MP3 se il video supera `MAIL_MAX_MB` (15 MB). Nella mail compare la riga «Podcast».
+
+- **Codice:** `podcast.py` è lo stesso file di newsletter-ps (copia identica: se lo modifichi, modificalo in entrambi). Testi e limiti sono nel blocco «PODCAST SETTIMANALE» di `config.py` (`PODCAST_INTRO`, `PODCAST_PROMPT`, `PODCAST_TITOLO`, `PODCAST_TEMA`...).
+- **Passi:** copione scritto da Claude e controllato (ogni numero deve stare nell'abstract o nella sintesi), voce Gemini TTS, verifica con Whisper, MP3 e video. Le schede del video sono quelle essenziali di Instagram.
+- **Secret:** `GEMINI_API_KEY` (lo stesso di newsletter-ps). Senza, o se qualcosa fallisce, la mail parte **senza** podcast e arriva l'avviso per email («Podcast non generato»). Se l'invio con l'allegato fallisce, la mail si rispedisce senza.
+- **Spegnerlo:** variabile `PODCAST=0`. Non esce su Telegram né sui social.
+- **Prova:** il run con `dry_run` genera il podcast senza inviare nulla; lo trovi nell'artifact, cartella `podcast/`.
+- **Musica:** con `musica/podcast.mp3` nel repo, tappeto sotto la voce e credito nella riga della mail.
+
 **Reel delle schede.** Subito dopo il carosello esce un Reel 9:16 con le stesse diapositive, una dopo
 l'altra: 3 s la copertina, da 5 a 8 s ogni scheda (secondo le parole da leggere), 4 s ogni locandina.
 Le diapositive stanno in un riquadro 4:5 sotto i 240 px di sopra, che l'app copre col profilo. Senza

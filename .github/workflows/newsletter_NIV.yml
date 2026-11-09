@@ -10,6 +10,7 @@ on:
       - 'corsi.json'
       - 'corsi.esempio.json'
       - 'newsletter_NIV.py'
+      - 'podcast.py'
       - 'config.py'
       - 'quality.py'
       - 'tests/**'
@@ -49,7 +50,8 @@ jobs:
   invia-newsletter-niv:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Newsletter pochi minuti; il podcast (voce Gemini, verifica Whisper, video) fino a 25.
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -71,6 +73,22 @@ jobs:
         continue-on-error: true
         run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
 
+      # Podcast: Whisper (verifica della voce e sottotitoli), numeri in lettere, audio. Non
+      # bloccante: se fallisce, la newsletter esce senza podcast. Il modello resta in cache.
+      - name: Cache modelli e pacchetti del podcast
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/pip
+          key: podcast-niv-v1
+
+      - name: Installa dipendenze podcast
+        id: dipendenze_podcast
+        continue-on-error: true
+        timeout-minutes: 10
+        run: pip install faster-whisper==1.2.1 num2words==0.5.14 soundfile librosa==0.11.0
+
       - name: Verifica test offline
         run: python -m unittest discover -s tests -v
 
@@ -90,6 +108,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # Podcast allegato alla mail: voce Gemini. Senza la chiave la mail parte senza podcast.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PODCAST_DIPENDENZE: ${{ steps.dipendenze_podcast.outcome || 'skipped' }}
           # Vuoto quando il workflow parte da cron-job.org: l'invio resta il default.
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SOLO_INSTAGRAM: ${{ inputs.solo_instagram && '1' || '' }}
@@ -120,6 +141,7 @@ jobs:
             newsletter_niv.log
             immagini/
             instagram/
+            podcast/
           if-no-files-found: warn
           retention-days: 30
 

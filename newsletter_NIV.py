@@ -21,10 +21,15 @@ import time
 import html
 import logging
 import smtplib
+import subprocess
+import sys
 import urllib.request
 import urllib.parse
 import urllib.error
 import xml.etree.ElementTree as ET
+from email import encoders
+from email.mime.audio import MIMEAudio
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
@@ -1053,7 +1058,7 @@ def pubblica_instagram(articoli, wl, dry_run=False):
         return None
 
 
-def build_html(articoli, stato):
+def build_html(articoli, stato, podcast_allegato=None):
     wl = numero_settimana()
     arts = ""
     for i, a in enumerate(articoli):
@@ -1119,6 +1124,20 @@ def build_html(articoli, stato):
             for k, l in enumerate(loghi))
         + '</td></tr></table>'
     ) if loghi else ""
+    credito = getattr(cfg, "PODCAST_MUSICA_CREDITO", "") if podcast_allegato and os.path.exists(
+        getattr(cfg, "PODCAST_MUSICA", "") or "") else ""
+    riga_podcast = (
+        f'      <tr><td style="background:#eef6ee;padding:14px 32px;border-bottom:1px solid #d5e5d5;">'
+        f'<span style="font-family:monospace;font-size:10px;font-weight:700;letter-spacing:2px;'
+        f'color:{cfg.COLOR_ACCENT};text-transform:uppercase;">Podcast</span>'
+        f'<span style="font-family:Georgia,serif;font-size:15px;color:#2a2a2a;"> &nbsp;'
+        f'{len(articoli)} articoli in due minuti: '
+        f'{"il video è in allegato" if str(podcast_allegato).endswith(".mp4") else "lo trovi in allegato"}, '
+        f'<em>{esc(os.path.basename(podcast_allegato))}</em>.</span>'
+        + (f'<br/><span style="font-family:monospace;font-size:10px;color:#889;">{esc(credito)}</span>'
+           if credito else "")
+        + '</td></tr>'
+    ) if podcast_allegato else ""
     return f'''<!DOCTYPE html>
 <html lang="it">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -1161,6 +1180,7 @@ def build_html(articoli, stato):
           <span style="font-family:monospace;font-size:10px;color:#889;letter-spacing:1px;">NIV: {niv_str} + generaliste</span>
         </td>
       </tr>
+      {riga_podcast}
       {disclaimer}
       <tr><td style="background:#ffffff;"><table width="100%" cellpadding="0" cellspacing="0">{arts}</table></td></tr>
       <tr>
@@ -1177,19 +1197,110 @@ def build_html(articoli, stato):
 </table></body></html>'''
 
 
-def invia_email(oggetto, html_body, destinatari):
-    msg = MIMEMultipart("alternative")
+def genera_podcast(articoli, wl):
+    """Il podcast della settimana, prima della mail: scrive articoli e schede in
+    cfg.PODCAST_ARCHIVIO ed esegue 'podcast.py genera' in un processo separato, con un tempo massimo
+    (cfg.PODCAST_TIMEOUT_MAIL). Restituisce {"mp4": percorso, "mp3": percorso} (solo i file
+    esistenti) o None. Mai eccezioni e mai bloccante: senza podcast la mail parte lo stesso."""
+    try:
+        if not getattr(cfg, "PODCAST_ABILITATO", False):
+            return None
+        if not cfg.PODCAST_DIPENDENZE_OK:
+            log.warning("Podcast saltato: dipendenze non installate (vedi il passo del workflow)")
+            return None
+        if not cfg.GEMINI_API_KEY and cfg.PODCAST_MOTORE == "gemini":
+            log.warning("Podcast non generato: manca il secret GEMINI_API_KEY")
+            return None
+        script = os.path.join(cfg.DIR_BASE, "podcast.py")
+        if not os.path.exists(script):
+            return None
+        os.makedirs(cfg.PODCAST_DIR, exist_ok=True)
+        schede, _ = instagram.genera_schede(articoli, wl, cfg, os.path.join(cfg.PODCAST_DIR, "schede"))
+        if len(schede) != len(articoli):
+            log.warning(f"Podcast: {len(schede)} schede per {len(articoli)} articoli, "
+                        "nel video le mancanti sono sostituite dalla copertina")
+            schede = []
+        with open(cfg.PODCAST_ARCHIVIO, "w", encoding="utf-8") as f:
+            json.dump({"settimana": wl["settimana"], "anno": wl["anno"], "pubblicati": articoli,
+                       "immagini": [os.path.abspath(x) for x in schede]}, f, ensure_ascii=False,
+                      default=str)
+        try:
+            os.remove(cfg.PODCAST_ESITO)          # mai leggere l'esito di una corsa precedente
+        except OSError:
+            pass
+        log.info(f"Generazione del podcast (al massimo {cfg.PODCAST_TIMEOUT_MAIL // 60} minuti)...")
+        inizio = time.time()
+        try:
+            subprocess.run([sys.executable, script, "genera", "--archivio", cfg.PODCAST_ARCHIVIO],
+                           cwd=cfg.DIR_BASE, timeout=cfg.PODCAST_TIMEOUT_MAIL, check=False)
+        except subprocess.TimeoutExpired:
+            log.warning(f"Podcast interrotto dopo {cfg.PODCAST_TIMEOUT_MAIL // 60} minuti: "
+                        "la newsletter parte senza")
+            return None
+        try:
+            with open(cfg.PODCAST_ESITO, encoding="utf-8") as f:
+                esito = json.load(f)
+        except Exception:
+            esito = {}
+        file = {k: esito[k] for k in ("mp4", "mp3") if esito.get(k) and os.path.exists(esito[k])}
+        if esito.get("ok") and file:
+            log.info(f"Podcast pronto in {(time.time() - inizio) / 60:.0f} minuti: "
+                     + ", ".join(file.values()))
+            return file
+        log.warning(f"Podcast non generato ({esito.get('errore') or 'esito mancante'}): "
+                    "la newsletter parte senza")
+    except Exception as e:
+        log.warning(f"Podcast non generato ({e}): la newsletter parte senza")
+    return None
+
+
+def allegato_podcast(podcast):
+    """Il file del podcast da allegare alla mail: il primo di cfg.PODCAST_MAIL_ALLEGATI (prima il
+    video, poi l'MP3) che sta entro cfg.MAIL_MAX_MB; None se non ce n'e'."""
+    for tipo in cfg.PODCAST_MAIL_ALLEGATI if podcast else []:
+        p = podcast.get(tipo)
+        if not p:
+            continue
+        mb = os.path.getsize(p) / 1e6
+        if mb <= cfg.MAIL_MAX_MB:
+            return p
+        log.warning(f"Podcast {tipo} non allegabile: {mb:.1f} MB, massimo {cfg.MAIL_MAX_MB}")
+    return None
+
+
+def invia_email(oggetto, html_body, destinatari, media=None):
+    """Spedisce la newsletter (Bcc). `media`: il podcast da allegare (MP4 o MP3), facoltativo."""
+    corpo = MIMEMultipart("alternative")
+    corpo.attach(MIMEText(f"NIV Weekly Digest - {oggetto}", "plain", "utf-8"))
+    corpo.attach(MIMEText(html_body, "html", "utf-8"))
+    msg = corpo
+    if media:
+        try:
+            with open(media, "rb") as f:
+                dati = f.read()
+            if media.endswith(".mp4"):
+                parte = MIMEBase("video", "mp4")
+                parte.set_payload(dati)
+                encoders.encode_base64(parte)
+            else:
+                parte = MIMEAudio(dati, _subtype="mpeg")
+            parte.add_header("Content-Disposition", "attachment", filename=os.path.basename(media))
+            msg = MIMEMultipart("mixed")
+            msg.attach(corpo)
+            msg.attach(parte)
+        except Exception as e:
+            log.warning(f"Podcast non allegato ({media}): {e}")
+            msg, media = corpo, None
     msg["Subject"] = oggetto
     msg["From"]    = f"NIV Weekly Digest <{cfg.GMAIL_USER}>"
     msg["To"]      = cfg.GMAIL_USER
     msg["Bcc"]     = ", ".join(destinatari)
-    msg.attach(MIMEText(f"NIV Weekly Digest - {oggetto}", "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
             smtp.login(cfg.GMAIL_USER, cfg.GMAIL_APP_PASSWORD)
             smtp.send_message(msg)
-        log.info(f"Email inviata a {len(destinatari)} destinatari (Bcc)")
+        log.info(f"Email inviata a {len(destinatari)} destinatari (Bcc)"
+                 + (f", podcast {os.path.basename(media)} allegato" if media else ""))
         return True
     except Exception as e:
         log.error(f"Invio fallito: {e}")
@@ -1375,7 +1486,10 @@ def _main():
         log.info("Avvisi corsi: " + "; ".join(
             f"{c['titolo'][:50]} ({avvisi.data_leggibile(c)})" for c in corsi))
     # Gli avvisi dei corsi (con locandina) vanno solo su Telegram, non nella mail.
-    html_body = build_html(selezionati, stato)
+    # Il podcast si genera prima della mail e parte allegato; nella prova solo-Instagram non serve.
+    podcast = None if cfg.SOLO_INSTAGRAM else genera_podcast(selezionati, wl)
+    media = allegato_podcast(podcast)
+    html_body = build_html(selezionati, stato, podcast_allegato=media)
 
     if cfg.DRY_RUN:
         with open(cfg.DRY_RUN_FILE, "w", encoding="utf-8") as f:
@@ -1395,6 +1509,7 @@ def _main():
             log.info(f"      rilevanza: {(a.get('rilevanza') or '')[:160]}")
             log.info(f"      limite: {(a.get('limite') or '')[:160]}")
         pubblica_instagram(selezionati, wl, dry_run=True)
+        log.info("Podcast da allegare: " + (media or "nessuno (la mail partirebbe senza)"))
         log.info("=== OK (dry run) ===")
         return True
 
@@ -1405,10 +1520,12 @@ def _main():
                  "=== Instagram: carosello NON pubblicato (vedi le righe 'Instagram:') ===")
         return bool(post)
 
-    ok_email = invia_email(
-        f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}",
-        html_body, destinatari,
-    )
+    oggetto = f"NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}"
+    ok_email = invia_email(oggetto, html_body, destinatari, media=media)
+    if not ok_email and media:
+        # Meglio la newsletter senza podcast che nessuna newsletter (allegato troppo pesante, ecc.).
+        log.warning("Invio con il podcast fallito: riprovo senza allegato")
+        ok_email = invia_email(oggetto, build_html(selezionati, stato), destinatari)
     ok_telegram = invia_telegram(selezionati, stato, corsi)
     pubblica_instagram(selezionati, wl)
 
