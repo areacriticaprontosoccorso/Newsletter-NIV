@@ -86,7 +86,7 @@ basso e con dissolvenza finale. Va scelta una traccia senza diritti d'autore e c
 l'uso commerciale. `IG_REEL_SCHEDE = False` in `config.py` spegne il Reel.
 Il Reel si carica con l'upload «resumable» dell'API (`rupload.facebook.com`), senza indirizzi pubblici.
 Non è stato provato con l'API reale (nei test è simulata): se il primo Reel non esce, nel log cerca
-«Instagram: Reel non pubblicato».
+«Instagram: Reel non pubblicato». Se Instagram non riesce a elaborare il video (`ProcessingFailedError`), il Reel si riprova una volta con un contenitore nuovo dopo 30 s; la pubblicazione non si ripete mai, quindi niente doppioni. Il log dice in che fase è fallito (creazione, caricamento, elaborazione, pubblicazione).
 
 **Post su X.** Dopo il Reel su Instagram e su Facebook, il Reel delle schede esce anche su X (`x_social.py`): un post con il video e un testo breve (titolo e settimana, tre hashtag, niente link: X fa pagare di più i post con link). Account unico per tutte e tre le newsletter. Servono quattro secret del repo, le chiavi dell'app X con permesso di scrittura (autenticazione OAuth 1.0a, chiavi che non scadono): `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET`. Senza, X viene saltato senza errori. X addebita ogni post sui crediti dell'app (circa 0,015 $ per un post senza link, secondo il listino del 2026: da verificare su developer.x.com); a crediti finiti il post non esce e il log riporta l'errore. `X_REEL = False` in `config.py` lo spegne; `X_HASHTAG` e `X_INVITO` cambiano hashtag e riga d'invito. Non parte con `solo_instagram`; in `dry_run` il testo finisce in `instagram/testo-x.txt`. Non provato con l'API reale (nei test è simulata): se il post non esce, nel log cerca «X: post non pubblicato».
 
