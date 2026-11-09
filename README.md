@@ -80,6 +80,8 @@ lunghezza del titolo. Il codice è `instagram.py` (`dati_scheda`, `html_scheda`,
 
 **Invito sulle locandine dei Reel.** `REEL_INVITO_LOCANDINA` e `REEL_INVITO_SOTTO` in `config.py`; vuoto = nessuna scritta. Acceso: nei Reel (e quindi anche su Facebook e X) la locandina ha in testa «Sei un medico d'emergenza-urgenza? Partecipa ai nostri corsi!» con sotto «Date, sede e iscrizioni nella newsletter»; la locandina sta intera sotto, su fondo scuro. Il carosello non cambia. Il codice è `diapositive_reel` in `instagram.py`.
 
+**Musica.** Il Reel delle schede ha la musica se nel repo c'è `musica/sottofondo.mp3` (`IG_MUSICA`); allora in fondo alla didascalia del Reel va il credito `IG_MUSICA_CREDITO` (licenza CC BY: l'autore va citato). Senza il file il Reel resta muto e senza credito.
+
 **Reel delle schede.** Subito dopo il carosello esce un Reel 9:16 con le stesse diapositive, una dopo
 l'altra: 3 s la copertina, da 5 a 8 s ogni scheda (secondo le parole da leggere), 4 s ogni locandina.
 Le diapositive stanno in un riquadro 4:5 sotto i 240 px di sopra, che l'app copre col profilo. Senza

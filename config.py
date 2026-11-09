@@ -251,6 +251,8 @@ IG_CHIUSURA     = "Sintesi generate con supporto di intelligenza artificiale: ve
 # messo sotto le schede.
 IG_REEL_SCHEDE  = True
 IG_MUSICA       = "musica/sottofondo.mp3"
+# Credito della musica dei Reel, in fondo alla didascalia (solo se il file IG_MUSICA esiste).
+IG_MUSICA_CREDITO = "Musica: «Soft Corporate» di Yuri Megis (CC BY 4.0, freemusicarchive.org)"
 # Invito scritto in testa alle locandine dei corsi nei Reel (Instagram, Facebook, X); il carosello non cambia.
 # Vuoto = nessuna scritta. Sotto l'invito: REEL_INVITO_SOTTO.
 REEL_INVITO_LOCANDINA = "Sei un medico d'emergenza-urgenza? Partecipa ai nostri corsi!"
