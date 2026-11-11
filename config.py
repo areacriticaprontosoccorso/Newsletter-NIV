@@ -22,10 +22,10 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 DRY_RUN      = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes", "si")
 DRY_RUN_FILE = "anteprima_digest.html"
 # Prova dell'invio su Instagram: stessa selezione e sintesi di una corsa vera, ma pubblica SOLO su
-# Instagram (carosello e Reel veri, con "[PROVA]" in testa alla didascalia): niente mail o Telegram.
+# Instagram (carosello e Reel veri, didascalia normale): niente mail o Telegram.
 # Attivazione: SOLO_INSTAGRAM=1. Ha effetto solo se DRY_RUN non e' attivo.
 SOLO_INSTAGRAM = os.environ.get("SOLO_INSTAGRAM", "").strip().lower() in ("1", "true", "yes", "si")
-IG_PREFISSO_PROVA = "[PROVA - da cancellare] "
+IG_PREFISSO_PROVA = ""      # vuoto: la didascalia e' quella di sempre (serve a recuperare un'uscita mancata)
 NCBI_TOOL          = "niv_weekly_digest_torino"
 
 # ═══════════════════════════════════════════════════════════════════════════════
