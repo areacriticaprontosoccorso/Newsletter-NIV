@@ -22,7 +22,7 @@ on:
         type: boolean
         default: false
       solo_instagram:
-        description: "Prova Instagram: pubblica SOLO su Instagram (carosello e Reel veri, con [PROVA] in didascalia), niente email o Telegram"
+        description: "Solo Instagram: pubblica SOLO su Instagram (carosello e Reel veri, didascalia normale; serve anche a recuperare un'uscita mancata), niente email o Telegram"
         type: boolean
         default: false
 

@@ -1,4 +1,4 @@
-"""Prova dell'invio su Instagram (SOLO_INSTAGRAM): solo Instagram, niente credenziali mail, "[PROVA]" in testa."""
+"""Prova dell'invio su Instagram (SOLO_INSTAGRAM): solo Instagram, niente credenziali mail, didascalia normale."""
 import importlib
 import os
 import shutil
@@ -57,7 +57,7 @@ class SoloInstagram(unittest.TestCase):
                 cfg.valida_config()
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "serve ffmpeg")
-    def test_prefisso_prova_solo_in_modalita_prova(self):
+    def test_didascalia_uguale_in_prova_e_no(self):
         try:
             import playwright  # noqa: F401
         except ImportError:
@@ -66,7 +66,8 @@ class SoloInstagram(unittest.TestCase):
             cfg.SOLO_INSTAGRAM = prova
             self.assertEqual(chiama(dry_run=True), "dry-run")
             testo = open(os.path.join(cfg.IG_DIR, "didascalia.txt"), encoding="utf-8").read()
-            self.assertEqual(testo.startswith(cfg.IG_PREFISSO_PROVA), prova)
+            self.assertEqual(cfg.IG_PREFISSO_PROVA, "")
+            self.assertNotIn("PROVA", testo)
 
     def test_pubblica_solo_su_instagram_e_senza_credenziali_non_fa_nulla(self):
         cfg.SOLO_INSTAGRAM = True
