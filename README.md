@@ -86,6 +86,8 @@ lunghezza del titolo. Il codice è `instagram.py` (`dati_scheda`, `html_scheda`,
 
 Ogni venerdì, prima della mail, si genera il podcast della settimana: una voce, circa due minuti, come quello di EM Weekly Digest. Parte **allegato alla mail degli iscritti** come video MP4 (copertina, le schede degli articoli che scorrono mentre se ne parla, sottotitoli; in coda la locandina del corso NIV con l'invito a voce e i loghi), o come MP3 se il video supera `MAIL_MAX_MB` (15 MB). Nella mail compare la riga «Podcast».
 
+**Controllo della voce (Gemini).** Se Gemini legge ad alta voce le note di regia (`PODCAST_GEMINI_STILE`), il blocco si rigenera senza note; se succede in tutti i tentativi, o se il parlato complessivo è troppo diverso dal copione (punteggio Whisper sotto `PODCAST_SOGLIA_MINIMA` = 0,75), la voce si scarta: NIV manda la mail senza podcast e arriva l'avviso. Prima della normalizzazione la voce passa da un filtro passa-alto e da una riduzione del rumore (`PODCAST_PULIZIA`).
+
 - **Codice:** `podcast.py` è lo stesso file di newsletter-ps (copia identica: se lo modifichi, modificalo in entrambi). Testi e limiti sono nel blocco «PODCAST SETTIMANALE» di `config.py` (`PODCAST_INTRO`, `PODCAST_PROMPT`, `PODCAST_TITOLO`, `PODCAST_TEMA`...).
 - **Passi:** copione scritto da Claude e controllato (ogni numero deve stare nell'abstract o nella sintesi), voce Gemini TTS, verifica con Whisper, MP3 e video. Le schede del video sono quelle essenziali di Instagram.
 - **Secret:** `GEMINI_API_KEY` (lo stesso di newsletter-ps). Senza, o se qualcosa fallisce, la mail parte **senza** podcast e arriva l'avviso per email («Podcast non generato»). Se l'invio con l'allegato fallisce, la mail si rispedisce senza.
