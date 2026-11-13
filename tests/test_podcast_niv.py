@@ -166,5 +166,43 @@ class SoloPodcast(unittest.TestCase):
         tg.assert_not_called()
 
 
+class ReelPodcast(unittest.TestCase):
+    WL = {"settimana": 46, "anno": 2026}
+
+    def test_senza_podcast_niente_reel(self):
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(cfg, "PODCAST_ESITO", os.path.join(d, "manca.json")), \
+                mock.patch.object(nl.instagram, "pubblica_reel_podcast") as reel:
+            self.assertIsNone(nl.pubblica_reel_podcast(self.WL))
+            reel.assert_not_called()
+
+    def test_podcast_riuscito_reel_con_estratto_e_saluti(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            mp4, esito = os.path.join(d, "p.mp4"), os.path.join(d, "esito.json")
+            open(mp4, "wb").close()
+            with open(esito, "w") as f:
+                json.dump({"ok": True, "mp4": mp4, "sezioni": [[0, 10], [10, 60]], "saluti": [100, 108]}, f)
+            with mock.patch.object(cfg, "PODCAST_ESITO", esito), \
+                    mock.patch.object(nl.instagram, "pubblica_reel_podcast", return_value="123") as reel:
+                self.assertEqual(nl.pubblica_reel_podcast(self.WL), "123")
+        args, kw = reel.call_args
+        self.assertEqual(args[0], mp4)
+        self.assertEqual(args[1], [[0, 10], [10, 60]])
+        self.assertTrue(args[2].startswith("NIV Weekly Digest — il podcast della settimana 46/2026"))
+        self.assertEqual(kw["saluti"], [100, 108])
+
+    def test_podcast_fallito_niente_reel(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            esito = os.path.join(d, "esito.json")
+            with open(esito, "w") as f:
+                json.dump({"ok": False, "errore": "x"}, f)
+            with mock.patch.object(cfg, "PODCAST_ESITO", esito), \
+                    mock.patch.object(nl.instagram, "pubblica_reel_podcast") as reel:
+                self.assertIsNone(nl.pubblica_reel_podcast(self.WL))
+                reel.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
