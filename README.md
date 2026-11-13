@@ -92,6 +92,7 @@ Ogni venerdì, prima della mail, si genera il podcast della settimana: una voce,
 - **Passi:** copione scritto da Claude e controllato (ogni numero deve stare nell'abstract o nella sintesi), voce Gemini TTS, verifica con Whisper, MP3 e video. Le schede del video sono quelle essenziali di Instagram.
 - **Secret:** `GEMINI_API_KEY` (lo stesso di newsletter-ps). Senza, o se qualcosa fallisce, la mail parte **senza** podcast e arriva l'avviso per email («Podcast non generato»). Se l'invio con l'allegato fallisce, la mail si rispedisce senza.
 - **Spegnerlo:** variabile `PODCAST=0`. Non esce su Telegram né sui social.
+- **Solo podcast:** Actions → NIV Weekly Digest → *Run workflow* → spunta **solo_podcast**. Fa selezione e sintesi come una corsa vera, genera il podcast e manda la mail col podcast allegato **solo a te** (secret `AVVISI_EMAIL`; se manca, la casella `GMAIL_USER`), con l'oggetto «[Prova podcast]». Niente iscritti, Telegram o social, nessun avviso. Il podcast è anche nell'artifact, cartella `podcast/`. Costa una corsa di Claude e di Gemini.
 - **Prova:** il run con `dry_run` genera il podcast senza inviare nulla; lo trovi nell'artifact, cartella `podcast/`.
 - **Musica:** con `musica/podcast.mp3` nel repo, tappeto sotto la voce e credito nella riga della mail.
 

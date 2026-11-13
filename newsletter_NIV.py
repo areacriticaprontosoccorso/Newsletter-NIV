@@ -1425,6 +1425,10 @@ def _main():
     if cfg.DRY_RUN:
         log.warning("=== MODALITA' DRY RUN ATTIVA: nessun invio ===")
         destinatari = []
+    elif cfg.SOLO_PODCAST:
+        destinatari = [cfg.SOLO_PODCAST_A or cfg.GMAIL_USER]
+        log.warning("=== MODALITA' SOLO PODCAST: la mail col podcast va solo a "
+                    f"{'AVVISI_EMAIL' if cfg.SOLO_PODCAST_A else 'GMAIL_USER'}, niente iscritti, Telegram o social ===")
     else:
         destinatari = carica_destinatari()
 
@@ -1512,6 +1516,16 @@ def _main():
         log.info("Podcast da allegare: " + (media or "nessuno (la mail partirebbe senza)"))
         log.info("=== OK (dry run) ===")
         return True
+
+    if cfg.SOLO_PODCAST:
+        if not media:
+            log.error("Solo podcast: podcast non generato (vedi le righe 'Podcast' e 'Gemini')")
+            return False
+        ok = invia_email(f"[Prova podcast] NIV Weekly Digest - Settimana {wl['settimana']}/{wl['anno']}",
+                         html_body, destinatari, media=media)
+        log.info("=== Solo podcast: mail di prova inviata ===" if ok else
+                 "=== Solo podcast: mail di prova NON inviata ===")
+        return ok
 
     if cfg.SOLO_INSTAGRAM:
         log.warning("=== MODALITA' SOLO INSTAGRAM (prova): nessuna email o Telegram ===")

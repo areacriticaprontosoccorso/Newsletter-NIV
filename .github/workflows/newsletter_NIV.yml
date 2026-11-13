@@ -25,6 +25,10 @@ on:
         description: "Solo Instagram: pubblica SOLO su Instagram (carosello e Reel veri, didascalia normale; serve anche a recuperare un'uscita mancata), niente email o Telegram"
         type: boolean
         default: false
+      solo_podcast:
+        description: "Solo podcast: genera il podcast e lo manda SOLO a te (AVVISI_EMAIL, o la casella GMAIL_USER) con la mail come la vedrebbero gli iscritti; niente iscritti, Telegram o social"
+        type: boolean
+        default: false
 
 # Evita doppi invii se cron-job.org spara due trigger ravvicinati:
 # il secondo run attende (non cancella) ma non gira in parallelo.
@@ -114,6 +118,8 @@ jobs:
           # Vuoto quando il workflow parte da cron-job.org: l'invio resta il default.
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SOLO_INSTAGRAM: ${{ inputs.solo_instagram && '1' || '' }}
+          SOLO_PODCAST: ${{ inputs.solo_podcast && '1' || '' }}
+          AVVISI_EMAIL: ${{ secrets.AVVISI_EMAIL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           # Instagram (carosello): senza IG_USER_ID non si pubblica. Le foto delle diapositive
@@ -148,7 +154,7 @@ jobs:
       # Email a AVVISI_EMAIL solo se un invio e' fallito o e' uscito incompleto (errori nel log
       # del run). Se va tutto bene non scrive. Mai bloccante. Non parte nelle prove.
       - name: Avvisa per email se qualcosa e' andato storto
-        if: always() && !inputs.dry_run && !inputs.solo_instagram
+        if: always() && !inputs.dry_run && !inputs.solo_instagram && !inputs.solo_podcast
         continue-on-error: true
         env:
           JOB_STATUS: ${{ job.status }}
