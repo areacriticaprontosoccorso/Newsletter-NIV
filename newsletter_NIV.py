@@ -1052,10 +1052,31 @@ def pubblica_instagram(articoli, wl, dry_run=False):
             + cfg.IG_INTESTAZIONE.format(settimana=wl["settimana"], anno=wl["anno"]),
             [a.get("titolo_it") or a["titolo"] for a in articoli], corsi_ig,
             cfg.IG_CHIUSURA, cfg.IG_HASHTAG, data_leggibile=avvisi.data_leggibile)
-        return instagram.pubblica(voci, didascalia, cfg, dry_run=dry_run, parole=parole)
+        post = instagram.pubblica(voci, didascalia, cfg, dry_run=dry_run, parole=parole)
+        pubblica_reel_podcast(wl, dry_run=dry_run)
+        return post
     except Exception as e:
         log.error(f"Instagram non pubblicato: {e}")
         return None
+
+
+def pubblica_reel_podcast(wl, dry_run=False):
+    """Il Reel con l'estratto del podcast di questa corsa (se e' riuscito), come in EM. Mai
+    bloccante. Id, 'dry-run' o None."""
+    try:
+        with open(cfg.PODCAST_ESITO, encoding="utf-8") as f:
+            esito = json.load(f)
+    except (OSError, ValueError):
+        return None                      # nessun podcast in questa corsa (es. solo_instagram)
+    mp4 = esito.get("mp4")
+    if not esito.get("ok") or not mp4 or not os.path.exists(mp4):
+        return None
+    didascalia = instagram.componi_didascalia(
+        cfg.IG_PODCAST_INTESTAZIONE.format(settimana=wl["settimana"], anno=wl["anno"]),
+        [], None, cfg.IG_CHIUSURA, cfg.IG_HASHTAG)
+    didascalia = instagram.con_credito_musica(didascalia, cfg, "PODCAST_MUSICA", "PODCAST_MUSICA_CREDITO")
+    return instagram.pubblica_reel_podcast(mp4, esito.get("sezioni"), didascalia, cfg, dry_run=dry_run,
+                                           saluti=esito.get("saluti"))
 
 
 def build_html(articoli, stato, podcast_allegato=None):

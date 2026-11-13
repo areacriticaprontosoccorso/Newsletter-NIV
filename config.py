@@ -270,6 +270,11 @@ IG_COPERTINA_ISCRIZIONE = True
 IG_COPERTINA_TITOLO = "NIV Weekly Digest"
 IG_COPERTINA_SOTTOTITOLO = "La newsletter settimanale sulla ventilazione non invasiva e sull'insufficienza respiratoria acuta"
 IG_COPERTINA_INVITO = "Iscriviti alla newsletter"
+# Reel con l'estratto del podcast (60-90 s, poi i saluti sui loghi), dopo il carosello e il Reel
+# delle schede. Solo se il podcast di questa corsa e' riuscito. IG_REEL_PODCAST=False lo spegne.
+IG_REEL_PODCAST = True
+IG_PODCAST_INTESTAZIONE = ("NIV Weekly Digest — il podcast della settimana {settimana}/{anno}\n"
+                           "Un estratto: il podcast completo arriva con la newsletter.")
 IG_HASHTAG      = "#NIV #VentilazioneNonInvasiva #MedicinaDUrgenza #AreaCritica #ProntoSoccorso #FOAMed"
 
 # Base pubblica dei file del repo (locandine dei corsi): https://.../main/<percorso>
