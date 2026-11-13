@@ -119,5 +119,52 @@ class Genera(unittest.TestCase):
             self.assertIsNone(nl.genera_podcast(ART, self.WL))
 
 
+class SoloPodcast(unittest.TestCase):
+    """SOLO_PODCAST: la mail col podcast va solo a AVVISI_EMAIL (o GMAIL_USER); niente iscritti,
+    Telegram o Instagram."""
+
+    def _corsa(self, media, avvisi="io@example.org"):
+        art = dict(ART[0], sintesi_it="Sintesi", bibliografia_verificata=True)
+        with mock.patch.object(cfg, "SOLO_PODCAST", True), mock.patch.object(cfg, "DRY_RUN", False), \
+                mock.patch.object(cfg, "SOLO_PODCAST_A", avvisi), \
+                mock.patch.object(cfg, "GMAIL_USER", "casella@example.org"), \
+                mock.patch.object(cfg, "valida_config"), \
+                mock.patch.object(nl, "carica_destinatari") as iscritti, \
+                mock.patch.object(nl, "raccogli_candidati", return_value=[art] * 9), \
+                mock.patch.object(nl, "componi_selezione", return_value=([art], dict(STATO))), \
+                mock.patch.object(nl, "sintetizza_articoli", side_effect=lambda x: x), \
+                mock.patch.object(nl, "controlla_sintesi", return_value={"approvato": True, "verifica_ai": "pass"}), \
+                mock.patch.object(cfg, "MINIMO_ARTICOLI", 1), \
+                mock.patch.object(nl.avvisi, "carica_corsi", return_value=[]), \
+                mock.patch.object(nl, "genera_podcast", return_value={"mp4": "p.mp4"} if media else None), \
+                mock.patch.object(nl, "allegato_podcast", return_value=media), \
+                mock.patch.object(nl, "invia_email", return_value=True) as mail, \
+                mock.patch.object(nl, "invia_telegram") as tg, \
+                mock.patch.object(nl, "pubblica_instagram") as ig:
+            ok = nl._main()
+        return ok, iscritti, mail, tg, ig
+
+    def test_mail_solo_a_te_niente_altro(self):
+        ok, iscritti, mail, tg, ig = self._corsa("podcast/p.mp4")
+        self.assertTrue(ok)
+        iscritti.assert_not_called()
+        tg.assert_not_called()
+        ig.assert_not_called()
+        oggetto, _, destinatari = mail.call_args[0]
+        self.assertTrue(oggetto.startswith("[Prova podcast]"))
+        self.assertEqual(destinatari, ["io@example.org"])
+        self.assertEqual(mail.call_args[1]["media"], "podcast/p.mp4")
+
+    def test_senza_avvisi_email_va_alla_casella(self):
+        _, _, mail, _, _ = self._corsa("podcast/p.mp4", avvisi="")
+        self.assertEqual(mail.call_args[0][2], ["casella@example.org"])
+
+    def test_podcast_mancato_nessuna_mail(self):
+        ok, _, mail, tg, _ = self._corsa(None)
+        self.assertFalse(ok)
+        mail.assert_not_called()
+        tg.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

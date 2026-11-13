@@ -25,6 +25,11 @@ DRY_RUN_FILE = "anteprima_digest.html"
 # Instagram (carosello e Reel veri, didascalia normale): niente mail o Telegram.
 # Attivazione: SOLO_INSTAGRAM=1. Ha effetto solo se DRY_RUN non e' attivo.
 SOLO_INSTAGRAM = os.environ.get("SOLO_INSTAGRAM", "").strip().lower() in ("1", "true", "yes", "si")
+# Solo podcast: stessa selezione e sintesi di una corsa vera, genera il podcast e lo manda SOLO a
+# AVVISI_EMAIL (o, se manca, alla casella GMAIL_USER), con la mail come la vedrebbero gli iscritti.
+# Niente iscritti, Telegram o social. Attivazione: SOLO_PODCAST=1.
+SOLO_PODCAST = os.environ.get("SOLO_PODCAST", "").strip().lower() in ("1", "true", "yes", "si")
+SOLO_PODCAST_A = os.environ.get("AVVISI_EMAIL", "").strip()
 IG_PREFISSO_PROVA = ""      # vuoto: la didascalia e' quella di sempre (serve a recuperare un'uscita mancata)
 NCBI_TOOL          = "niv_weekly_digest_torino"
 
