@@ -56,6 +56,10 @@ jobs:
     runs-on: ubuntu-latest
     # Newsletter pochi minuti; il podcast (voce Gemini, verifica Whisper, video) fino a 25.
     timeout-minutes: 45
+    # contents: write serve solo alla strada di riserva dei Reel: se Instagram rifiuta il caricamento
+    # diretto, il video sta pochi minuti come allegato di una release temporanea (poi cancellata).
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -109,6 +113,7 @@ jobs:
 
       - name: Esegui newsletter NIV
         env:
+          GH_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
