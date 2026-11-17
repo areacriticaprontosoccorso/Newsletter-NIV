@@ -7,6 +7,7 @@ on:
       - 'instagram.py'
       - 'avviso.py'
       - 'x_social.py'
+      - 'ripubblica.py'
       - 'corsi.json'
       - 'corsi.esempio.json'
       - 'newsletter_NIV.py'
@@ -29,6 +30,18 @@ on:
         description: "Solo podcast: genera il podcast e lo manda SOLO a te (AVVISI_EMAIL, o la casella GMAIL_USER) con la mail come la vedrebbero gli iscritti; niente iscritti, Telegram o social"
         type: boolean
         default: false
+      ripubblica_reel:
+        description: "Ripubblica SOLO i Reel falliti dell'ultima corsa di questa settimana (niente mail, Telegram, carosello, nessuna chiamata a Claude)"
+        type: boolean
+        default: false
+      ripubblica_cosa:
+        description: "Cosa ripubblicare (con ripubblica_reel): ig_schede, ig_podcast, carosello, x"
+        type: string
+        default: "ig_schede,ig_podcast"
+      run_id:
+        description: "Facoltativo, con ripubblica_reel: numero della corsa da ripubblicare (dall'indirizzo della pagina del run)"
+        type: string
+        default: ""
 
 # Evita doppi invii se cron-job.org spara due trigger ravvicinati:
 # il secondo run attende (non cancella) ma non gira in parallelo.
@@ -56,10 +69,14 @@ jobs:
     runs-on: ubuntu-latest
     # Newsletter pochi minuti; il podcast (voce Gemini, verifica Whisper, video) fino a 25.
     timeout-minutes: 45
+    env:
+      RIPUBBLICA: ${{ inputs.ripubblica_reel && '1' || '' }}
     # contents: write serve solo alla strada di riserva dei Reel: se Instagram rifiuta il caricamento
     # diretto, il video sta pochi minuti come allegato di una release temporanea (poi cancellata).
+    # actions: read serve a ripubblica.py per scaricare l'artifact di una corsa precedente.
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -84,6 +101,7 @@ jobs:
       # Podcast: Whisper (verifica della voce e sottotitoli), numeri in lettere, audio. Non
       # bloccante: se fallisce, la newsletter esce senza podcast. Il modello resta in cache.
       - name: Cache modelli e pacchetti del podcast
+        if: env.RIPUBBLICA != '1'
         uses: actions/cache@v4
         with:
           path: |
@@ -93,6 +111,7 @@ jobs:
 
       - name: Installa dipendenze podcast
         id: dipendenze_podcast
+        if: env.RIPUBBLICA != '1'
         continue-on-error: true
         timeout-minutes: 10
         run: pip install faster-whisper==1.2.1 num2words==0.5.14 soundfile librosa==0.11.0
@@ -112,6 +131,7 @@ jobs:
         run: echo "NEWSLETTER_INIZIO=$(date -u '+%Y-%m-%d %H:%M:%S,%3N')" >> "$GITHUB_ENV"
 
       - name: Esegui newsletter NIV
+        if: env.RIPUBBLICA != '1'
         env:
           GH_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -140,6 +160,24 @@ jobs:
           X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
         run: python newsletter_NIV.py
 
+      # Solo con ripubblica_reel: rifà e ripubblica i Reel indicati di una corsa gia' fatta, con gli
+      # articoli (e il podcast) di quella corsa presi dall'artifact. Niente mail ne' Telegram.
+      - name: Ripubblica i Reel
+        if: env.RIPUBBLICA == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          RIPUBBLICA_COSA: ${{ inputs.ripubblica_cosa }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_PAGE_TOKEN: ${{ secrets.IG_PAGE_TOKEN }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: python ripubblica.py
+
       # Caricato anche quando lo step precedente fallisce: il log e' proprio
       # cio' che serve quando qualcosa e' andato storto.
       - name: Carica anteprima e log
@@ -153,6 +191,7 @@ jobs:
             immagini/
             instagram/
             podcast/
+            archivio/
           if-no-files-found: warn
           retention-days: 30
 

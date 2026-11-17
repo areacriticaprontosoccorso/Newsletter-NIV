@@ -82,6 +82,8 @@ lunghezza del titolo. Il codice è `instagram.py` (`dati_scheda`, `html_scheda`,
 
 **Musica.** Il Reel delle schede ha la musica se nel repo c'è `musica/sottofondo.mp3` (`IG_MUSICA`); allora in fondo alla didascalia del Reel va il credito `IG_MUSICA_CREDITO` (licenza CC BY: l'autore va citato). Senza il file il Reel resta muto e senza credito.
 
+**Ripubblicare solo i Reel falliti.** Actions → NIV Weekly Digest → *Run workflow* → spunta **ripubblica_reel**. Scarica l'artifact dell'ultima corsa vera di questa settimana (o della corsa `run_id`), rimette archivio, schede e podcast di quella corsa, rifà i Reel con il codice attuale e pubblica solo le voci di **ripubblica_cosa** (predefinite: `ig_schede,ig_podcast`; ammesse: `ig_schede`, `ig_podcast`, `x`, `carosello`). Niente mail, Telegram o post di Facebook; nessuna chiamata a Claude. Con **dry_run** prepara i file senza pubblicare. Serve che la corsa originale abbia salvato `archivio/` nell'artifact (dalla prossima corsa in poi). ⚠️ Ogni voce si ripubblica ogni volta che la scegli: non riselezionare quelle già uscite, o compaiono i doppioni. Codice: `ripubblica.py` (uguale nei tre repository); in `instagram.py` le voci passano da `cfg.SOLO_REEL`.
+
 ## Podcast (allegato alla mail)
 
 Ogni venerdì, prima della mail, si genera il podcast della settimana: una voce, circa due minuti, come quello di EM Weekly Digest. Parte **allegato alla mail degli iscritti** come video MP4 (copertina, le schede degli articoli che scorrono mentre se ne parla, sottotitoli; in coda la locandina del corso NIV con l'invito a voce e i loghi), o come MP3 se il video supera `MAIL_MAX_MB` (15 MB). Nella mail compare la riga «Podcast».

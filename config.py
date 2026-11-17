@@ -249,6 +249,14 @@ X_INVITO        = ""
 # Token della Pagina usato solo da Instagram: se manca si usa FB_PAGE_TOKEN (che resta dei post Facebook).
 IG_PAGE_TOKEN   = os.environ.get("IG_PAGE_TOKEN", "").strip()
 IG_DIR          = "instagram"
+
+# Archivio della corsa (articoli scelti con sintesi): finisce nell'artifact e serve a ripubblica.py
+# per rifare solo i Reel falliti. RIPUBBLICA_PREDEFINITE: voci ripubblicate se non se ne scelgono.
+ARCHIVIO_ABILITATO = True
+ARCHIVIO_DIR       = "archivio"
+ARCHIVIO_FILE      = "digest-s{settimana}-{anno}.json"
+RIPUBBLICA_PREDEFINITE = "ig_schede,ig_podcast"
+
 IG_INTESTAZIONE = "NIV Weekly Digest — Settimana {settimana}/{anno}\nGli articoli più rilevanti sulla ventilazione non invasiva e sull'insufficienza respiratoria acuta."
 IG_CHIUSURA     = "Sintesi generate con supporto di intelligenza artificiale: verifica sempre la fonte originale. Iscrizione alla newsletter dal link in bio."
 # Reel: stesse diapositive del carosello, una dopo l'altra (IG_REEL_SCHEDE=False lo spegne). Senza
