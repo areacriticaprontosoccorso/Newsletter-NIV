@@ -246,6 +246,20 @@ X_ACCESS_TOKEN  = os.environ.get("X_ACCESS_TOKEN", "").strip()
 X_ACCESS_SECRET = os.environ.get("X_ACCESS_SECRET", "").strip()
 X_HASHTAG       = ""
 X_INVITO        = ""
+
+# YouTube (youtube.py): Reel come Shorts e podcast completo. Servono i secret YT_CLIENT_ID, YT_CLIENT_SECRET e
+# YT_REFRESH_TOKEN (youtube_autorizza.py); senza, YouTube viene saltato. YT_ABILITATO = False lo spegne.
+# Un progetto Google non verificato da YouTube ha i video dell'API bloccati come PRIVATI (README).
+YT_ABILITATO     = True
+YT_CLIENT_ID     = os.environ.get("YT_CLIENT_ID", "").strip()
+YT_CLIENT_SECRET = os.environ.get("YT_CLIENT_SECRET", "").strip()
+YT_REFRESH_TOKEN = os.environ.get("YT_REFRESH_TOKEN", "").strip()
+YT_PRIVACY       = "public"          # 'public', 'unlisted' o 'private'
+YT_CATEGORIA     = "27"              # 27 = Istruzione
+YT_TAGS          = ["NIV", "ventilazione non invasiva", "insufficienza respiratoria acuta", "pronto soccorso", "newsletter", "podcast"]
+# Titoli (la data si aggiunge da sola): 'schede' = Short con le schede, 'podcast' = Short con l'estratto del podcast, 'completo' = podcast intero
+YT_TITOLI        = {"schede": "NIV Weekly Digest · gli articoli della settimana", "podcast": "NIV Weekly Digest · estratto del podcast",
+                    "completo": "NIV Weekly Digest · il podcast della settimana"}
 # Token della Pagina usato solo da Instagram: se manca si usa FB_PAGE_TOKEN (che resta dei post Facebook).
 IG_PAGE_TOKEN   = os.environ.get("IG_PAGE_TOKEN", "").strip()
 IG_DIR          = "instagram"
