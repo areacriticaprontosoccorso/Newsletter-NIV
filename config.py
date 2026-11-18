@@ -321,6 +321,13 @@ PODCAST_TIMEOUT_MAIL = 25 * 60
 # supererebbero MAIL_MAX_MB (Gmail accetta 25 MB; molte caselle aziendali meno).
 PODCAST_MAIL_ALLEGATI = ["mp4", "mp3"]
 MAIL_MAX_MB           = 15
+
+# Il podcast anche sul canale Telegram, dopo i messaggi della newsletter: il video (o l'MP3 se il
+# video supera i 49 MB dei bot). TELEGRAM_PODCAST = False lo spegne. {articoli} = "3 articoli".
+TELEGRAM_PODCAST = True
+TELEGRAM_PODCAST_TESTO = ("🎧 <b>NIV Weekly Digest</b> — il podcast della settimana {settimana}/{anno}\n"
+                          "{articoli} di ventilazione non invasiva e insufficienza respiratoria, in pochi minuti.\n"
+                          "<i>Sintesi generate con l'intelligenza artificiale: verificate sempre sulle fonti.</i>")
 # Il workflow passa l'esito del passo che installa torch/chatterbox: se è fallito
 # non si perde tempo a tentare. In locale (variabile assente) si tenta.
 PODCAST_DIPENDENZE_OK = os.environ.get("PODCAST_DIPENDENZE", "success").strip() in ("success", "")
