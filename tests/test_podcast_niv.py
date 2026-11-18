@@ -166,6 +166,28 @@ class SoloPodcast(unittest.TestCase):
         tg.assert_not_called()
 
 
+class TelegramPodcast(unittest.TestCase):
+    WL = {"settimana": 47, "anno": 2026}
+
+    def test_didascalia_e_titolo(self):
+        with mock.patch.object(nl.telegram_podcast, "invia_podcast", return_value=5) as inv:
+            self.assertEqual(nl.invia_podcast_telegram({"mp4": "p.mp4"}, self.WL, 5), 5)
+        testo = inv.call_args[0][1]
+        self.assertIn("NIV Weekly Digest", testo)
+        self.assertIn("5 articoli di ventilazione", testo)
+        self.assertEqual(inv.call_args[1]["titolo"], "NIV Weekly Digest 47/2026")
+
+    def test_spento_o_senza_podcast(self):
+        with mock.patch.object(nl.telegram_podcast, "invia_podcast") as inv:
+            self.assertIsNone(nl.invia_podcast_telegram(None, self.WL, 3))
+            with mock.patch.object(cfg, "TELEGRAM_PODCAST", False):
+                self.assertIsNone(nl.invia_podcast_telegram({"mp4": "p.mp4"}, self.WL, 3))
+        inv.assert_not_called()
+
+    def test_voce_resta_maschile(self):
+        self.assertEqual(cfg.PODCAST_GEMINI_VOCE, "Charon")
+
+
 class ReelPodcast(unittest.TestCase):
     WL = {"settimana": 46, "anno": 2026}
 

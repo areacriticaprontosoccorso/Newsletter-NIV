@@ -12,6 +12,7 @@ on:
       - 'corsi.esempio.json'
       - 'newsletter_NIV.py'
       - 'podcast.py'
+      - 'telegram_podcast.py'
       - 'config.py'
       - 'quality.py'
       - 'tests/**'

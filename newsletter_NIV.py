@@ -37,6 +37,7 @@ from datetime import datetime, timedelta, timezone
 import config as cfg
 import corsi as avvisi
 import instagram
+import telegram_podcast
 from quality import controlla_sintesi, salva_report
 
 TUTTE_RIVISTE = [r for r in cfg.RIVISTE_NIV + cfg.RIVISTE
@@ -1435,6 +1436,24 @@ def build_tg_footer():
     )
 
 
+def invia_podcast_telegram(podcast, wl, n_articoli):
+    """Il podcast anche sul canale Telegram, dopo i messaggi della newsletter (telegram_podcast.py).
+    Mai bloccante. message_id o None."""
+    try:
+        if not podcast or not getattr(cfg, "TELEGRAM_PODCAST", True):
+            return None
+        articoli = "Un articolo" if n_articoli == 1 else f"{n_articoli} articoli"
+        testo = cfg.TELEGRAM_PODCAST_TESTO.format(settimana=wl["settimana"], anno=wl["anno"], articoli=articoli)
+        credito = getattr(cfg, "PODCAST_MUSICA_CREDITO", "")
+        if credito and os.path.exists(getattr(cfg, "PODCAST_MUSICA", "") or ""):
+            testo += f"\n<i>{esc(credito)}</i>"
+        return telegram_podcast.invia_podcast(podcast, testo,
+                                              titolo=f"{cfg.PODCAST_TITOLO} {wl['settimana']}/{wl['anno']}")
+    except Exception as e:
+        log.error(f"Telegram: podcast non inviato ({e})")
+        return None
+
+
 def invia_telegram(articoli, stato, corsi=None):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -1591,6 +1610,7 @@ def _main():
         log.warning("Invio con il podcast fallito: riprovo senza allegato")
         ok_email = invia_email(oggetto, build_html(selezionati, stato), destinatari)
     ok_telegram = invia_telegram(selezionati, stato, corsi)
+    invia_podcast_telegram(podcast, wl, len(selezionati))
     pubblica_instagram(selezionati, wl)
 
     log.info("=== Email: OK ===" if ok_email else "=== Email: FALLITO ===")
