@@ -137,27 +137,35 @@ INPUT:\n''' + json.dumps({'pmid': art['pmid'], 'abstract': fonte,
             coperti = set()
             accettati = []
             for voce in riconciliati:
+                # Una voce sbagliata del revisore (estratto senza il numero, motivo non ammesso, ...)
+                # non fa fallire tutta la verifica: il numero resta NON dimostrato, finisce fra gli
+                # errori e scatta la correzione della sintesi. Prima l'articolo veniva escluso senza
+                # tentativo di correzione (20/11, PMID 43034002).
+                motivo_scarto = None
+                numero = _numero_risposta(voce.get('numero')) if isinstance(voce, dict) else None
                 if not isinstance(voce, dict):
-                    raise ValueError('Voce di riconciliazione non valida: atteso oggetto JSON')
-                numero = _numero_risposta(voce.get('numero'))
-                # Una voce superflua non dimostra nulla e non copre alcun extra.
-                # Non deve però far fallire una sintesi altrimenti verificata.
-                if numero is not None and numero not in extra:
+                    motivo_scarto = 'voce non valida (atteso oggetto JSON)'
+                elif numero is not None and numero not in extra:
+                    # Una voce superflua non dimostra nulla e non copre alcun extra.
                     risultato['avvisi'].append('Riconciliazione superflua ignorata: ' + numero)
                     continue
-                if numero is None:
-                    raise ValueError('Formato numero di riconciliazione non valido: ' + repr(voce.get('numero')))
-                if voce.get('motivo') not in ('equivalente', 'strutturale'):
-                    raise ValueError('Motivo di riconciliazione non valido per ' + numero)
-                if not evidenza_presente(voce.get('evidenza'), fonte):
-                    raise ValueError('Estratto di riconciliazione non rintracciabile per ' + numero)
-                # Anche l'equivalenza di segno deve avere il valore nella citazione.
-                if voce['motivo'] == 'equivalente':
+                elif numero is None:
+                    motivo_scarto = 'formato del numero non valido: ' + repr(voce.get('numero'))
+                elif voce.get('motivo') not in ('equivalente', 'strutturale'):
+                    motivo_scarto = 'motivo non ammesso'
+                elif not evidenza_presente(voce.get('evidenza'), fonte):
+                    motivo_scarto = 'estratto non rintracciabile nell\'abstract'
+                elif voce['motivo'] == 'equivalente':
+                    # Anche l'equivalenza di segno deve avere il valore nella citazione.
                     valore = numero.lstrip('-+')
                     if valore not in {v.lstrip('-+') for v in numeri(voce['evidenza'])}:
-                        raise ValueError('Valore assente nell’evidenza di riconciliazione')
+                        motivo_scarto = 'valore assente nell\'estratto citato'
                 elif not re.fullmatch(r'\d+', numero):
-                    raise ValueError('Un conteggio strutturale non può giustificare percentuali o effetti')
+                    motivo_scarto = 'un conteggio strutturale non giustifica percentuali o effetti'
+                if motivo_scarto:
+                    risultato['avvisi'].append('Riconciliazione respinta'
+                                               + (f' per {numero}' if numero else '') + ': ' + motivo_scarto)
+                    continue
                 coperti.add(numero)
                 accettati.append({**voce, 'numero': numero})
             risultato['numeri_riconciliati'] = accettati
