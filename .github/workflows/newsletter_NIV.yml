@@ -162,6 +162,9 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          LINKEDIN_TOKEN: ${{ secrets.LINKEDIN_TOKEN }}
+          LINKEDIN_AUTORE: ${{ secrets.LINKEDIN_AUTORE }}
+          LINKEDIN_SCADENZA: ${{ secrets.LINKEDIN_SCADENZA }}
         run: python newsletter_NIV.py
 
       # Solo con ripubblica_reel: rifà e ripubblica i Reel indicati di una corsa gia' fatta, con gli
@@ -183,6 +186,9 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          LINKEDIN_TOKEN: ${{ secrets.LINKEDIN_TOKEN }}
+          LINKEDIN_AUTORE: ${{ secrets.LINKEDIN_AUTORE }}
+          LINKEDIN_SCADENZA: ${{ secrets.LINKEDIN_SCADENZA }}
         run: python ripubblica.py
 
       # Caricato anche quando lo step precedente fallisce: il log e' proprio

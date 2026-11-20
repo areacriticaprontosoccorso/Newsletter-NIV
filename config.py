@@ -264,6 +264,11 @@ YT_TITOLI        = {"schede": "NIV Weekly Digest · gli articoli della settimana
 IG_PAGE_TOKEN   = os.environ.get("IG_PAGE_TOKEN", "").strip()
 IG_DIR          = "instagram"
 
+# LinkedIn (linkedin.py): il podcast completo sul profilo personale, con il testo dei Reel. Servono
+# i secret LINKEDIN_TOKEN, LINKEDIN_AUTORE e LINKEDIN_SCADENZA (linkedin_autorizza.py); senza,
+# LinkedIn viene saltato. Il token dura 60 giorni: 10 giorni prima arriva l'avviso per email.
+LI_ABILITATO     = True
+
 # Archivio della corsa (articoli scelti con sintesi): finisce nell'artifact e serve a ripubblica.py
 # per rifare solo i Reel falliti. RIPUBBLICA_PREDEFINITE: voci ripubblicate se non se ne scelgono.
 ARCHIVIO_ABILITATO = True
