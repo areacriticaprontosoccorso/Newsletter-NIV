@@ -81,6 +81,13 @@ Controlla popolazione, disegno, denominatori, gruppi di trattamento, outcome,
 effetti assoluti/relativi, intervalli di confidenza, p-value, direzione degli
 esiti e distinzione associazione/causalità. Controlla anche rilevanza e limite:
 non devono affermare fatti o limiti metodologici non desumibili dall'abstract.
+Un intervallo di confidenza al 95% che non include il valore nullo (1 per OR,
+RR e HR; 0 per differenze) sostiene "statisticamente significativo" anche se
+l'abstract non usa la parola; un IC che include il valore nullo no.
+"rilevanza" è il commento per medici di Pronto Soccorso: può applicare i
+risultati al Pronto Soccorso o alla pratica d'urgenza. È errore solo se
+attribuisce allo studio un setting, una popolazione o un risultato che
+l'abstract non riporta (es. "studio condotto in PS" se era in terapia intensiva).
 Non accettare numeri corretti attribuiti a gruppi o outcome sbagliati.
 La sintesi è breve (90-120 parole), non una riproduzione completa dell'abstract.
 Omettere outcome secondari o dettagli non essenziali è consentito se la sintesi
