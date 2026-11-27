@@ -123,10 +123,14 @@ MAX_CANDIDATI_PROMPT  = 150  # tetto di candidati inviati a ogni filtro
 # Integrazione con articoli di medicina d'urgenza quando mancano articoli NIV.
 # False = comportamento "solo NIV": il digest esce corto.
 INTEGRA_CON_EM = True
+# Articoli di medicina d'urgenza di RISERVA chiesti al filtro (stadio B) anche quando gli articoli
+# NIV sono 5: se il controllo di qualità ne esclude qualcuno, i posti si riempiono da qui (sintesi
+# e controllo come gli altri). 0 = nessuna riserva (la newsletter esce corta, come prima).
+RISERVA_EM = 3
 
 # NB: NON reintrodurre "temperature": è deprecato per questo modello (HTTP 400).
 MAX_TOKENS_FILTRO          = 800
-MAX_TOKENS_FILTRO_MISTO    = 1200  # due stadi in una risposta
+MAX_TOKENS_FILTRO_MISTO    = 1500  # due stadi in una risposta, piu' la riserva EM
 MAX_TOKENS_SINTESI_MULTI   = 4000
 MAX_TOKENS_SINTESI_SINGOLA = 800
 
@@ -668,8 +672,10 @@ l'STADIO A lascia libere.
 """ + _TESTA_NIV + """
 
 === STADIO B — MEDICINA D'URGENZA ===
-Sia R = {n} meno il numero di articoli selezionati nello STADIO A. Se R è zero,
-salta lo STADIO B. Nello STADIO B considera SOLO articoli NON selezionati nello
+Sia R = {n} meno il numero di articoli selezionati nello STADIO A, PIÙ {riserva}
+articoli di riserva: la riserva si usa solo se un articolo non supera i controlli
+di qualità delle sintesi, quindi lo STADIO B si esegue SEMPRE, anche con lo STADIO
+A al completo. Nello STADIO B considera SOLO articoli NON selezionati nello
 STADIO A; non puoi riproporre un articolo dello STADIO A.
 """ + _TESTA_EM + """
 

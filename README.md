@@ -9,13 +9,21 @@ raggiungere un numero: anche uno solo puo' essere pubblicato. Se il filtro NIV n
 risponde, o se nessun articolo supera i controlli, la newsletter non viene inviata
 e GitHub Actions segnala l'errore.
 
+**Riserva di medicina d'urgenza.** Il filtro restituisce sempre, oltre agli articoli NIV, fino a
+`RISERVA_EM` (3) articoli di medicina d'urgenza di riserva, anche quando i NIV sono 5. Se il controllo
+di qualità delle sintesi esclude qualche articolo, i posti si riempiono dalla riserva, nell'ordine:
+sintesi con il prompt della medicina d'urgenza e stesso controllo (con un tentativo di correzione).
+Se anche un ripescato non passa si prova il successivo; finita la riserva la newsletter esce corta.
+Nel log: «Ripescaggio: N articoli di medicina d'urgenza dalla riserva». `RISERVA_EM = 0` la spegne.
+
 Test offline: `python -m unittest discover -s tests -v` (eseguiti sulle PR e prima di ogni invio).
 
 ### Chiamate API per run
 
 Filtro NIV+EM in una sola chiamata (due stadi nello stesso prompt), sintesi di tutti
 gli articoli in una sola chiamata, poi un controllo per articolo: 7 chiamate con 5
-articoli. Con `INTEGRA_CON_EM = False` il filtro e' solo NIV.
+articoli. Con `INTEGRA_CON_EM = False` il filtro e' solo NIV. Solo nelle settimane con articoli
+esclusi dal controllo: una sintesi e un controllo in più per i ripescati dalla riserva.
 
 ## Avvisi dei corsi
 

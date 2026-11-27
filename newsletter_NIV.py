@@ -772,11 +772,13 @@ def filtra_em(candidati, esclusi_pmid, n):
 
 
 def filtra_misto(candidati, n):
-    """Stadi NIV ed EM in UNA chiamata. Restituisce (niv, em) oppure None se il
-    filtro non e' stato eseguito (None != ([], []): nessun pertinente e' un esito
-    legittimo). Lo stadio A ha la precedenza; i tetti si applicano in codice."""
+    """Stadi NIV ed EM in UNA chiamata. Restituisce (niv, em, riserva) oppure None se
+    il filtro non e' stato eseguito (None != ([], [], []): nessun pertinente e' un esito
+    legittimo). Lo stadio A ha la precedenza; i tetti si applicano in codice. `riserva`:
+    articoli EM in piu' (cfg.RISERVA_EM), usati se il controllo di qualita' esclude qualcuno."""
     pool = _limita_candidati(candidati)
-    prompt = cfg.PROMPT_FILTRO_MISTO.format(n=n, articoli=_blocchi_prompt(pool))
+    n_riserva = max(0, int(getattr(cfg, "RISERVA_EM", 0)))
+    prompt = cfg.PROMPT_FILTRO_MISTO.format(n=n, riserva=n_riserva, articoli=_blocchi_prompt(pool))
     log.info(f"Filtro NIV+EM (una chiamata) su {len(pool)} candidati -> max {n}")
     if cfg.DRY_RUN:
         log.info("--- CANDIDATI SOTTOPOSTI AL FILTRO ---")
@@ -798,18 +800,20 @@ def filtra_misto(candidati, n):
         a["origine"] = "niv"
     gia = {a["pmid"] for a in niv}
     mancanti = n - len(niv)
-    em = []
-    if mancanti > 0:
+    em, riserva = [], []
+    if mancanti + n_riserva > 0:
         voci_b = [v for v in voci if stadio(v) == "B"
                   and str(v.get("pmid", "")).strip() not in gia]
-        em, _ = _applica_voci(voci_b, pool, mancanti,
-                              max_per_tema=cfg.MAX_PER_TEMA, etichetta="EM")
-        for a in em:
+        # i primi `mancanti` riempiono i posti liberi, gli altri restano in riserva
+        em_tutti, _ = _applica_voci(voci_b, pool, mancanti + n_riserva,
+                                    max_per_tema=cfg.MAX_PER_TEMA, etichetta="EM")
+        for a in em_tutti:
             a["origine"] = "em"
+        em, riserva = em_tutti[:mancanti], em_tutti[mancanti:]
     n_coll = sum(1 for a in niv if a.get("categoria") == "collegata")
     log.info(f"Articoli NIV pertinenti: {len(niv)} ({len(niv) - n_coll} non invasiva, "
-             f"{n_coll} collegata); sostitutivi EM: {len(em)}")
-    return niv, em
+             f"{n_coll} collegata); sostitutivi EM: {len(em)}; riserva EM: {len(riserva)}")
+    return niv, em, riserva
 
 
 def componi_selezione(candidati):
@@ -821,11 +825,11 @@ def componi_selezione(candidati):
         if esito is None:
             log.error("Filtro non eseguito: nessun articolo selezionato, invio da annullare")
             return [], {"n_niv": 0, "n_em": 0, "filtro_ko": True}
-        niv, em = esito
+        niv, em, riserva = esito
         articoli = niv + em
         if not articoli:
             log.warning("Nessun articolo validato dai filtri NIV/EM")
-        return articoli, {"n_niv": len(niv), "n_em": len(em), "filtro_ko": False}
+        return articoli, {"n_niv": len(niv), "n_em": len(em), "filtro_ko": False, "riserva": riserva}
 
     niv = filtra_niv(candidati, n_tot)
 
@@ -1517,25 +1521,20 @@ def _main():
 
     selezionati = sintetizza_articoli(selezionati)
     n_selezionati = len(selezionati)
-    approvati = []
-    for art in selezionati:
-        verifica = controlla_sintesi(art, chiama_claude)
-        if (not verifica['approvato'] and art.get('bibliografia_verificata') and
-                art.get('sintesi_it') and verifica['verifica_ai'] in ('pass', 'fail')):
-            precedente = verifica
-            log.warning('PMID %s: un tentativo di correzione della sintesi', art['pmid'])
-            sintetizza(art, correzioni={'errori': precedente['errori'],
-                                      'sintesi_precedente': art['sintesi_it']})
-            verifica = controlla_sintesi(art, chiama_claude)
-            verifica['tentativo_precedente'] = precedente
-        verifica['fonti'] = art.get('fonti', [])
-        verifica['rivista'] = art.get('nlmta', '')
-        verifica['bibliografia_differenze_corrette'] = art.get('bibliografia_differenze_corrette', [])
-        QUALITA['sintesi'].append(verifica)
-        if verifica['approvato']:
-            approvati.append(art)
-        else:
-            log.error('PMID %s escluso dai controlli: %s', art['pmid'], verifica['errori'])
+    approvati = verifica_sintesi(selezionati)
+
+    # Posti lasciati liberi dagli esclusi: si riempiono con la riserva di medicina d'urgenza del
+    # filtro, con sintesi e controllo come gli altri. Se anche quelli non passano, si prova il
+    # successivo; finita la riserva la newsletter esce corta.
+    riserva = list(stato.get("riserva") or [])
+    while len(approvati) < cfg.ARTICOLI_FINALI and riserva:
+        k = cfg.ARTICOLI_FINALI - len(approvati)
+        lotto, riserva = riserva[:k], riserva[k:]
+        log.warning(f"Ripescaggio: {len(lotto)} articoli di medicina d'urgenza dalla riserva "
+                    f"al posto degli esclusi ({', '.join(a['pmid'] for a in lotto)})")
+        lotto = sintetizza_articoli(lotto)
+        n_selezionati += len(lotto)
+        approvati += verifica_sintesi(lotto)
     selezionati = approvati
 
     # Una newsletter senza sintesi in italiano non va spedita: e' il sintomo di
@@ -1616,6 +1615,31 @@ def _main():
     log.info("=== Email: OK ===" if ok_email else "=== Email: FALLITO ===")
     log.info("=== Telegram: OK ===" if ok_telegram else "=== Telegram: FALLITO o non configurato ===")
     return ok_email
+
+
+def verifica_sintesi(articoli):
+    """Controllo di qualita' delle sintesi (quality.py), con un tentativo di correzione per
+    articolo. Restituisce gli articoli approvati; gli altri finiscono nel log come esclusi."""
+    approvati = []
+    for art in articoli:
+        verifica = controlla_sintesi(art, chiama_claude)
+        if (not verifica['approvato'] and art.get('bibliografia_verificata') and
+                art.get('sintesi_it') and verifica['verifica_ai'] in ('pass', 'fail')):
+            precedente = verifica
+            log.warning('PMID %s: un tentativo di correzione della sintesi', art['pmid'])
+            sintetizza(art, correzioni={'errori': precedente['errori'],
+                                      'sintesi_precedente': art['sintesi_it']})
+            verifica = controlla_sintesi(art, chiama_claude)
+            verifica['tentativo_precedente'] = precedente
+        verifica['fonti'] = art.get('fonti', [])
+        verifica['rivista'] = art.get('nlmta', '')
+        verifica['bibliografia_differenze_corrette'] = art.get('bibliografia_differenze_corrette', [])
+        QUALITA['sintesi'].append(verifica)
+        if verifica['approvato']:
+            approvati.append(art)
+        else:
+            log.error('PMID %s escluso dai controlli: %s', art['pmid'], verifica['errori'])
+    return approvati
 
 
 def main():

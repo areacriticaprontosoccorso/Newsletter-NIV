@@ -143,7 +143,7 @@ class PromptTest(unittest.TestCase):
                       "IMPATTO DECISIONALE", "Massimo 2 articoli sullo stesso tema clinico",
                       "Case report e case series"):
             self.assertIn(frase, misto)
-        self.assertEqual(misto.format(n=5, articoli="X").count("X"), 1)
+        self.assertEqual(misto.format(n=5, riserva=3, articoli="X").count("X"), 1)
 
     def test_regola_virgolette_nei_prompt_di_formato(self):
         for nome in ("PROMPT_FILTRO_MISTO", "PROMPT_SINTESI_MULTI_MISTO"):
