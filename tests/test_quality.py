@@ -77,5 +77,29 @@ class Riconciliazione(unittest.TestCase):
         self.assertEqual(v["verifica_ai"], "errore")
 
 
+class RegoleDelRevisore(unittest.TestCase):
+    """27/11: esclusi due articoli per un IC che esclude 1 detto "statisticamente significativo" e
+    per una rilevanza che applicava i risultati al Pronto Soccorso. Il prompt ora lo consente."""
+
+    def _prompt(self):
+        visto = {}
+
+        def chiama(prompt, max_tokens=0, system=""):
+            visto["p"] = prompt
+            return "non json"
+        quality.controlla_sintesi(articolo(SINTESI_25), chiama)
+        return visto["p"]
+
+    def test_ic_che_esclude_il_valore_nullo_sostiene_la_significativita(self):
+        p = self._prompt()
+        self.assertIn('non include il valore nullo', p)
+        self.assertIn('sostiene "statisticamente significativo"', p)
+
+    def test_rilevanza_puo_applicare_i_risultati_al_ps(self):
+        p = self._prompt()
+        self.assertIn("può applicare i\nrisultati al Pronto Soccorso", p)
+        self.assertIn('attribuisce allo studio un setting', p)
+
+
 if __name__ == "__main__":
     unittest.main()
